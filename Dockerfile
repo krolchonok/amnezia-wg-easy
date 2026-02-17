@@ -2,8 +2,8 @@
 # nodejs 20 hangs on build with armv6/armv7
 FROM docker.io/library/node:18-alpine AS build_node_modules
 
-# Update npm to latest
-RUN npm install -g npm@latest
+# Update npm to compatible version
+RUN npm install -g npm@10
 
 # Copy Web UI
 COPY src /app
@@ -36,7 +36,8 @@ RUN apk add --no-cache \
     dumb-init \
     iptables \
     nodejs \
-    npm
+    npm \
+    openssl
 
 # Use iptables-legacy
 RUN update-alternatives --install /sbin/iptables iptables /sbin/iptables-legacy 10 --slave /sbin/iptables-restore iptables-restore /sbin/iptables-legacy-restore --slave /sbin/iptables-save iptables-save /sbin/iptables-legacy-save

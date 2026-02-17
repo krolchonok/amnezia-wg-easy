@@ -4,8 +4,11 @@ const bcrypt = require('bcryptjs');
 const crypto = require('node:crypto');
 const basicAuth = require('basic-auth');
 const { createServer } = require('node:http');
+const { createServer: createHttpsServer } = require('node:https');
 const { stat, readFile } = require('node:fs/promises');
-const { resolve, sep } = require('node:path');
+const { readFileSync, existsSync, mkdirSync, writeFileSync } = require('node:fs');
+const { resolve, sep, dirname } = require('node:path');
+const { execSync } = require('node:child_process');
 
 const expressSession = require('express-session');
 const debug = require('debug')('Server');
@@ -41,6 +44,9 @@ const {
   PROMETHEUS_METRICS_PASSWORD,
   DICEBEAR_TYPE,
   USE_GRAVATAR,
+  SSL_ENABLED,
+  SSL_CERT_PATH,
+  SSL_KEY_PATH,
 } = require('../config');
 
 const requiresPassword = !!PASSWORD_HASH;
@@ -438,8 +444,47 @@ module.exports = class Server {
       }),
     );
 
-    createServer(toNodeListener(app)).listen(PORT, WEBUI_HOST);
-    debug(`Listening on http://${WEBUI_HOST}:${PORT}`);
+    if (SSL_ENABLED) {
+      // Generate self-signed certificate if files don't exist
+      if (!existsSync(SSL_CERT_PATH) || !existsSync(SSL_KEY_PATH)) {
+        debug('SSL certificate or key not found, generating self-signed certificate...');
+        const certDir = dirname(SSL_CERT_PATH);
+        const keyDir = dirname(SSL_KEY_PATH);
+        if (!existsSync(certDir)) mkdirSync(certDir, { recursive: true });
+        if (!existsSync(keyDir)) mkdirSync(keyDir, { recursive: true });
+
+        try {
+          execSync(
+            `openssl req -x509 -newkey rsa:2048 `
+            + `-keyout "${SSL_KEY_PATH}" `
+            + `-out "${SSL_CERT_PATH}" `
+            + `-days 365 -nodes `
+            + `-subj "/CN=amnezia-wg-easy"`,
+            { stdio: 'pipe' },
+          );
+          debug('Self-signed certificate generated successfully');
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to generate self-signed certificate:', err.message);
+          // eslint-disable-next-line no-console
+          console.error('Falling back to HTTP');
+          createServer(toNodeListener(app)).listen(PORT, WEBUI_HOST);
+          debug(`Listening on http://${WEBUI_HOST}:${PORT}`);
+          cronJobEveryMinute();
+          return;
+        }
+      }
+
+      const sslOptions = {
+        cert: readFileSync(SSL_CERT_PATH),
+        key: readFileSync(SSL_KEY_PATH),
+      };
+      createHttpsServer(sslOptions, toNodeListener(app)).listen(PORT, WEBUI_HOST);
+      debug(`Listening on https://${WEBUI_HOST}:${PORT}`);
+    } else {
+      createServer(toNodeListener(app)).listen(PORT, WEBUI_HOST);
+      debug(`Listening on http://${WEBUI_HOST}:${PORT}`);
+    }
 
     cronJobEveryMinute();
   }

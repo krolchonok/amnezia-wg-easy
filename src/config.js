@@ -47,6 +47,10 @@ module.exports.PROMETHEUS_METRICS_PASSWORD = process.env.PROMETHEUS_METRICS_PASS
 module.exports.DICEBEAR_TYPE = process.env.DICEBEAR_TYPE || false;
 module.exports.USE_GRAVATAR = process.env.USE_GRAVATAR || false;
 
+module.exports.SSL_ENABLED = process.env.SSL_ENABLED === 'true';
+module.exports.SSL_CERT_PATH = process.env.SSL_CERT_PATH || '/etc/ssl/certs/ssl-cert.pem';
+module.exports.SSL_KEY_PATH = process.env.SSL_KEY_PATH || '/etc/ssl/private/ssl-key.pem';
+
 const getRandomInt = (min, max) => min + Math.floor(Math.random() * (max - min));
 const getRandomJunkSize = () => getRandomInt(15, 150);
 const getRandomHeader = () => getRandomInt(1, 2_147_483_647);
