@@ -13,13 +13,17 @@ To generate a bcrypt password hash using docker, run the following command :
 
 ```sh
 docker run -it ghcr.io/krolchonok/amnezia-wg-easy wgpw YOUR_PASSWORD
-PASSWORD_HASH='$2b$12$coPqCsPtcFO.Ab99xylBNOW4.Iu7OOA2/ZIboHN6/oyxca3MWo7fW' // literally YOUR_PASSWORD
+ORIGINAL_PASSWORD='YOUR_PASSWORD'
+PASSWORD_HASH='$2b$12$coPqCsPtcFO.Ab99xylBNOW4.Iu7OOA2/ZIboHN6/oyxca3MWo7fW'
+PASSWORD_HASH_DOCKER_COMPOSE='$$2b$$12$$coPqCsPtcFO.Ab99xylBNOW4.Iu7OOA2/ZIboHN6/oyxca3MWo7fW'
 ```
 If a password is not provided, the tool will prompt you for one :
 ```sh
-docker run -it ghcr.io/wg-easy/wg-easy wgpw
+docker run -it ghcr.io/krolchonok/amnezia-wg-easy wgpw
 Enter your password:      // hidden prompt, type in your password
+ORIGINAL_PASSWORD='YOUR_PASSWORD'
 PASSWORD_HASH='$2b$12$coPqCsPtcFO.Ab99xylBNOW4.Iu7OOA2/ZIboHN6/oyxca3MWo7fW'
+PASSWORD_HASH_DOCKER_COMPOSE='$$2b$$12$$coPqCsPtcFO.Ab99xylBNOW4.Iu7OOA2/ZIboHN6/oyxca3MWo7fW'
 ```
 
 **Important** : make sure to enclose your password in **single quotes** when you run `docker run` command :
@@ -33,10 +37,12 @@ $ echo '$2b$12$coPqCsPtcF' <-- correct
 $2b$12$coPqCsPtcF
 ```
 
-**Important** : Please note: don't wrap the generated hash password in single quotes when you use `docker-compose.yml`. Instead, replace each `$` symbol with two `$$` symbols. For example:
+**Important** : You can use `PASSWORD_HASH_DOCKER_COMPOSE` directly in `.env`/`docker-compose.yml`. It already contains escaped `$` symbols (`$$`).
+
+Example manual format:
 
 ``` yaml
 - PASSWORD_HASH=$$2y$$10$$hBCoykrB95WSzuV4fafBzOHWKu9sbyVa34GJr8VV5R/pIelfEMYyG
 ```
 
-This hash is for the password 'foobar123', obtained using the command `docker run ghcr.io/wg-easy/wg-easy wgpw foobar123` and then inserted an additional `$` before each existing `$` symbol.
+This hash is for the password 'foobar123', obtained using the command `docker run ghcr.io/krolchonok/amnezia-wg-easy wgpw foobar123` and then inserted an additional `$` before each existing `$` symbol.
