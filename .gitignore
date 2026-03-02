@@ -5,3 +5,20 @@
 .DS_Store
 *.swp
 .idea
+
+# Local environment / secrets
+.env
+.env.*
+!.env_example
+!.env.example
+
+# Private keys / certificates / VPN profiles
+*.pem
+*.key
+*.p12
+*.pfx
+*.ovpn
+id_rsa
+id_rsa_*
+id_ed25519
+id_ed25519_*
