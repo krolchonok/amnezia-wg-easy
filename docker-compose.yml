@@ -10,11 +10,12 @@ services:
     container_name: amnezia-wg-easy
     volumes:
       - etc_wireguard:/etc/wireguard
+      - /etc/letsencrypt:/etc/letsencrypt:ro
       # - ./ssl/cert.pem:/etc/ssl/certs/ssl-cert.pem:ro   # ⚠️ Uncomment for SSL
       # - ./ssl/key.pem:/etc/ssl/private/ssl-key.pem:ro    # ⚠️ Uncomment for SSL
     ports:
-      - "${WG_PORT}:${WG_PORT}/udp"
-      - "${PORT}:${PORT}/tcp"
+      - "${WG_PORT:-51820}:${WG_PORT:-51820}/udp"
+      - "${PORT:-51821}:${PORT:-51821}/tcp"
     restart: unless-stopped
     cap_add:
       - NET_ADMIN

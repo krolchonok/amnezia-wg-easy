@@ -2,6 +2,7 @@
 
 const fs = require('node:fs/promises');
 const path = require('path');
+const https = require('node:https');
 const debug = require('debug')('WireGuard');
 const crypto = require('node:crypto');
 const QRCode = require('qrcode');
@@ -39,11 +40,88 @@ const {
 
 module.exports = class WireGuard {
 
+  constructor() {
+    this.__resolvedWgHost = null;
+  }
+
+  async __fetchPublicIp(url) {
+    return new Promise((resolve, reject) => {
+      const req = https.get(url, {
+        headers: {
+          'User-Agent': 'amnezia-wg-easy',
+        },
+      }, (res) => {
+        if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
+          reject(new Error(`HTTP ${res.statusCode}`));
+          res.resume();
+          return;
+        }
+
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
+        res.on('end', () => {
+          const text = body.trim();
+          const ipv4 = text.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/);
+          if (ipv4) {
+            resolve(ipv4[0]);
+            return;
+          }
+
+          const ipv6 = text.match(/\b(?:[A-Fa-f0-9:]+:+)+[A-Fa-f0-9]+\b/);
+          if (ipv6) {
+            resolve(ipv6[0]);
+            return;
+          }
+
+          reject(new Error('Response does not contain IP address'));
+        });
+      });
+
+      req.on('error', reject);
+      req.setTimeout(5000, () => {
+        req.destroy(new Error('Timeout'));
+      });
+    });
+  }
+
+  async __resolveWgHost() {
+    const configuredHost = typeof WG_HOST === 'string' ? WG_HOST.trim() : '';
+    if (!configuredHost) {
+      throw new Error('WG_HOST Environment Variable Not Set!');
+    }
+
+    if (configuredHost.toLowerCase() !== 'auto') {
+      this.__resolvedWgHost = configuredHost;
+      return;
+    }
+
+    const providers = [
+      'https://2ip.ru',
+      'https://ifconfig.me/ip',
+    ];
+
+    for (const provider of providers) {
+      try {
+        const detectedIp = await this.__fetchPublicIp(provider);
+        this.__resolvedWgHost = detectedIp;
+        debug(`WG_HOST auto detected via ${provider}: ${detectedIp}`);
+        // eslint-disable-next-line no-console
+        console.log(`[WG_HOST] Auto-detected public IP via ${provider}: ${detectedIp}`);
+        return;
+      } catch (err) {
+        debug(`WG_HOST auto detection failed via ${provider}: ${err.message}`);
+      }
+    }
+
+    throw new Error('WG_HOST=auto but failed to detect public IP from 2ip.ru and ifconfig.me');
+  }
+
   async __buildConfig() {
     this.__configPromise = Promise.resolve().then(async () => {
-      if (!WG_HOST) {
-        throw new Error('WG_HOST Environment Variable Not Set!');
-      }
+      await this.__resolveWgHost();
 
       debug('Loading configuration...');
       let config;
@@ -260,7 +338,7 @@ PublicKey = ${config.server.publicKey}
 ${client.preSharedKey ? `PresharedKey = ${client.preSharedKey}\n` : ''
 }AllowedIPs = ${WG_ALLOWED_IPS}
 PersistentKeepalive = ${WG_PERSISTENT_KEEPALIVE}
-Endpoint = ${WG_HOST}:${WG_CONFIG_PORT}`;
+Endpoint = ${this.__resolvedWgHost}:${WG_CONFIG_PORT}`;
   }
 
   async getClientQRCodeSVG({ clientId }) {

@@ -6,6 +6,7 @@ module.exports.RELEASE = version;
 module.exports.PORT = process.env.PORT || '51821';
 module.exports.WEBUI_HOST = process.env.WEBUI_HOST || '0.0.0.0';
 module.exports.PASSWORD_HASH = process.env.PASSWORD_HASH;
+module.exports.PASSWORD = process.env.PASSWORD;
 module.exports.MAX_AGE = parseInt(process.env.MAX_AGE, 10) * 1000 * 60 || 0;
 module.exports.WG_PATH = process.env.WG_PATH || '/etc/wireguard/';
 module.exports.WG_DEVICE = process.env.WG_DEVICE || 'eth0';
@@ -42,14 +43,53 @@ module.exports.WG_ENABLE_ONE_TIME_LINKS = process.env.WG_ENABLE_ONE_TIME_LINKS |
 module.exports.UI_ENABLE_SORT_CLIENTS = process.env.UI_ENABLE_SORT_CLIENTS || 'false';
 module.exports.WG_ENABLE_EXPIRES_TIME = process.env.WG_ENABLE_EXPIRES_TIME || 'false';
 module.exports.ENABLE_PROMETHEUS_METRICS = process.env.ENABLE_PROMETHEUS_METRICS || 'false';
-module.exports.PROMETHEUS_METRICS_PASSWORD = process.env.PROMETHEUS_METRICS_PASSWORD;
+module.exports.PROMETHEUS_METRICS_PASSWORD = process.env.PROMETHEUS_METRICS_PASSWORD
+  || process.env.PROMETHEUS_METRICS_PASSWORD_PLAIN;
+module.exports.PROMETHEUS_METRICS_PASSWORD_HASH = process.env.PROMETHEUS_METRICS_PASSWORD_HASH
+  || process.env.PROMETHEUS_METRICS_PASSWORD_BCRYPT;
+
+if (module.exports.PASSWORD_HASH && module.exports.PASSWORD) {
+  // eslint-disable-next-line no-console
+  console.warn('Both PASSWORD_HASH and PASSWORD are set; either value can be used for login.');
+}
+
+if (process.env.PROMETHEUS_METRICS_PASSWORD_PLAIN) {
+  // eslint-disable-next-line no-console
+  console.warn('PROMETHEUS_METRICS_PASSWORD_PLAIN is deprecated, use PROMETHEUS_METRICS_PASSWORD.');
+}
+
+if (process.env.PROMETHEUS_METRICS_PASSWORD_BCRYPT) {
+  // eslint-disable-next-line no-console
+  console.warn('PROMETHEUS_METRICS_PASSWORD_BCRYPT is deprecated, use PROMETHEUS_METRICS_PASSWORD_HASH.');
+}
+
+if (module.exports.PROMETHEUS_METRICS_PASSWORD && module.exports.PROMETHEUS_METRICS_PASSWORD_HASH) {
+  // eslint-disable-next-line no-console
+  console.warn('Both PROMETHEUS_METRICS_PASSWORD and PROMETHEUS_METRICS_PASSWORD_HASH are set; either value can be used for metrics auth.');
+}
 
 module.exports.DICEBEAR_TYPE = process.env.DICEBEAR_TYPE || false;
 module.exports.USE_GRAVATAR = process.env.USE_GRAVATAR || false;
 
 module.exports.SSL_ENABLED = process.env.SSL_ENABLED === 'true';
-module.exports.SSL_CERT_PATH = process.env.SSL_CERT_PATH || '/etc/ssl/certs/ssl-cert.pem';
-module.exports.SSL_KEY_PATH = process.env.SSL_KEY_PATH || '/etc/ssl/private/ssl-key.pem';
+
+const defaultSslCertPath = '/etc/ssl/certs/ssl-cert.pem';
+const defaultSslKeyPath = '/etc/ssl/private/ssl-key.pem';
+const rawSslCertPath = process.env.SSL_CERT_PATH;
+const rawSslKeyPath = process.env.SSL_KEY_PATH;
+
+if (typeof rawSslCertPath === 'string' && rawSslCertPath !== rawSslCertPath.trim()) {
+  // eslint-disable-next-line no-console
+  console.warn('SSL_CERT_PATH has leading/trailing spaces; using trimmed value.');
+}
+
+if (typeof rawSslKeyPath === 'string' && rawSslKeyPath !== rawSslKeyPath.trim()) {
+  // eslint-disable-next-line no-console
+  console.warn('SSL_KEY_PATH has leading/trailing spaces; using trimmed value.');
+}
+
+module.exports.SSL_CERT_PATH = (rawSslCertPath || defaultSslCertPath).trim();
+module.exports.SSL_KEY_PATH = (rawSslKeyPath || defaultSslKeyPath).trim();
 
 const getRandomInt = (min, max) => min + Math.floor(Math.random() * (max - min));
 const getRandomJunkSize = () => getRandomInt(15, 150);

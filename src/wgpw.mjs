@@ -6,12 +6,18 @@ import { Writable } from 'stream';
 import readline from 'readline';
 
 // Function to generate hash
-const generateHash = async (password) => {
+const generateHash = async (password, { showOriginalPassword = false } = {}) => {
   try {
     const salt = await bcrypt.genSalt(12);
     const hash = await bcrypt.hash(password, salt);
+    if (showOriginalPassword) {
+      // eslint-disable-next-line no-console
+      console.log(`ORIGINAL_PASSWORD='${password}'`);
+    }
     // eslint-disable-next-line no-console
     console.log(`PASSWORD_HASH='${hash}'`);
+    // eslint-disable-next-line no-console
+    console.log(`PASSWORD_HASH_DOCKER_COMPOSE='${hash.replace(/\$/g, () => '$$')}'`);
   } catch (error) {
     throw new Error(`Failed to generate hash : ${error}`);
   }
@@ -68,10 +74,10 @@ const readStdinPassword = () => {
     if (password && hash) {
       await comparePassword(password, hash);
     } else if (password) {
-      await generateHash(password);
+      await generateHash(password, { showOriginalPassword: true });
     } else {
       const password = await readStdinPassword();
-      await generateHash(password);
+      await generateHash(password, { showOriginalPassword: true });
     }
   } catch (error) {
     // eslint-disable-next-line no-console
