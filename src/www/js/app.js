@@ -58,6 +58,29 @@ const CHART_COLORS = {
   gradient: { light: ['rgba(0,0,0,1.0)', 'rgba(0,0,0,1.0)'], dark: ['rgba(128,128,128,0)', 'rgba(128,128,128,0)'] },
 };
 
+const LANGUAGE_LABELS = {
+  en: 'English',
+  ua: 'Українська',
+  ru: 'Русский',
+  tr: 'Türkçe',
+  no: 'Norsk',
+  pl: 'Polski',
+  fr: 'Français',
+  de: 'Deutsch',
+  ca: 'Català',
+  es: 'Español',
+  ko: '한국어',
+  vi: 'Tiếng Việt',
+  nl: 'Nederlands',
+  is: 'Íslenska',
+  pt: 'Português',
+  zh: '简体中文',
+  tw: '繁體中文',
+  it: 'Italiano',
+  th: 'ไทย',
+  hi: 'हिन्दी',
+};
+
 new Vue({
   el: '#app',
   components: {
@@ -85,6 +108,8 @@ new Vue({
     clientEditExpireDate: null,
     clientEditExpireDateId: null,
     qrcode: null,
+    configText: null,
+    configClientName: null,
 
     currentRelease: null,
     latestRelease: null,
@@ -93,8 +118,8 @@ new Vue({
 
     uiChartType: 0,
     avatarSettings: {
-      'dicebear': null,
-      'gravatar': false,
+      dicebear: null,
+      gravatar: false,
     },
     enableOneTimeLinks: false,
     enableSortClient: false,
@@ -103,6 +128,13 @@ new Vue({
 
     uiShowCharts: localStorage.getItem('uiShowCharts') === '1',
     uiTheme: localStorage.theme || 'auto',
+    uiLanguage: localStorage.getItem('lang') || 'en',
+    languageMenuOpen: false,
+    languageMenuPosition: {
+      top: 0,
+      left: 0,
+      width: 176,
+    },
     prefersDarkScheme: window.matchMedia('(prefers-color-scheme: dark)'),
 
     chartOptions: {
@@ -207,7 +239,7 @@ new Vue({
         if (client.name.includes('@') && client.name.includes('.') && this.avatarSettings.gravatar) {
           client.avatar = `https://gravatar.com/avatar/${sha256(client.name.toLowerCase().trim())}.jpg`;
         } else if (this.avatarSettings.dicebear) {
-          client.avatar = `https://api.dicebear.com/9.x/${this.avatarSettings.dicebear}/svg?seed=${sha256(client.name.toLowerCase().trim())}`
+          client.avatar = `https://api.dicebear.com/9.x/${this.avatarSettings.dicebear}/svg?seed=${sha256(client.name.toLowerCase().trim())}`;
         }
 
         if (!this.clientsPersist[client.id]) {
@@ -323,6 +355,105 @@ new Vue({
         .catch((err) => alert(err.message || err.toString()))
         .finally(() => this.refresh().catch(console.error));
     },
+    showClientConfiguration(client) {
+      this.api.getClientConfiguration({ clientId: client.id })
+        .then((configText) => {
+          this.configClientName = client.name;
+          this.configText = configText;
+        })
+        .catch((err) => alert(err.message || err.toString()));
+    },
+    closeClientConfiguration() {
+      this.configText = null;
+      this.configClientName = null;
+    },
+    escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    },
+    highlightConfigLine(line) {
+      const trimmed = line.trim();
+      if (!trimmed) return '';
+
+      if (trimmed.startsWith('#') || trimmed.startsWith(';')) {
+        return `<span class="text-neutral-500 italic">${this.escapeHtml(line)}</span>`;
+      }
+
+      if (/^\[[^\]]+\]$/.test(trimmed)) {
+        return `<span class="text-blue-700 dark:text-blue-300 font-semibold">${this.escapeHtml(trimmed)}</span>`;
+      }
+
+      const separatorIndex = line.indexOf('=');
+      if (separatorIndex === -1) {
+        return this.escapeHtml(line);
+      }
+
+      const key = line.slice(0, separatorIndex).trim();
+      const value = line.slice(separatorIndex + 1).trim();
+      const normalizedKey = key.toLowerCase();
+
+      const keyClass = 'text-red-700 dark:text-red-300';
+      const valueClassesByKey = {
+        privatekey: 'text-emerald-700 dark:text-emerald-300',
+        publickey: 'text-emerald-700 dark:text-emerald-300',
+        presharedkey: 'text-emerald-700 dark:text-emerald-300',
+        endpoint: 'text-sky-700 dark:text-sky-300',
+        address: 'text-sky-700 dark:text-sky-300',
+        allowedips: 'text-sky-700 dark:text-sky-300',
+        dns: 'text-sky-700 dark:text-sky-300',
+        listenport: 'text-amber-700 dark:text-amber-300',
+        persistentkeepalive: 'text-amber-700 dark:text-amber-300',
+        mtu: 'text-amber-700 dark:text-amber-300',
+        jc: 'text-amber-700 dark:text-amber-300',
+        jmin: 'text-amber-700 dark:text-amber-300',
+        jmax: 'text-amber-700 dark:text-amber-300',
+        s1: 'text-amber-700 dark:text-amber-300',
+        s2: 'text-amber-700 dark:text-amber-300',
+        h1: 'text-amber-700 dark:text-amber-300',
+        h2: 'text-amber-700 dark:text-amber-300',
+        h3: 'text-amber-700 dark:text-amber-300',
+        h4: 'text-amber-700 dark:text-amber-300',
+        postup: 'text-violet-700 dark:text-violet-300',
+        preup: 'text-violet-700 dark:text-violet-300',
+        postdown: 'text-violet-700 dark:text-violet-300',
+        predown: 'text-violet-700 dark:text-violet-300',
+      };
+      const valueClass = valueClassesByKey[normalizedKey] || 'text-gray-900 dark:text-neutral-100';
+
+      return `<span class="${keyClass}">${this.escapeHtml(key)}</span><span class="text-neutral-500"> = </span><span class="${valueClass}">${this.escapeHtml(value)}</span>`;
+    },
+    async copyClientConfiguration() {
+      if (!this.configText) return;
+
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(this.configText);
+        } else {
+          const textArea = document.createElement('textarea');
+          textArea.value = this.configText;
+          textArea.setAttribute('readonly', '');
+          textArea.style.position = 'fixed';
+          textArea.style.left = '-9999px';
+          document.body.appendChild(textArea);
+          textArea.focus();
+          textArea.select();
+          const copied = document.execCommand('copy');
+          document.body.removeChild(textArea);
+
+          if (!copied) {
+            throw new Error('Failed to copy configuration.');
+          }
+        }
+
+        alert(this.$t('configCopied'));
+      } catch (err) {
+        alert(err.message || err.toString());
+      }
+    },
     enableClient(client) {
       this.api.enableClient({ clientId: client.id })
         .catch((err) => alert(err.message || err.toString()))
@@ -385,6 +516,46 @@ new Vue({
     toggleCharts() {
       localStorage.setItem('uiShowCharts', this.uiShowCharts ? 1 : 0);
     },
+    toggleLanguageMenu() {
+      if (!this.languageMenuOpen) {
+        this.updateLanguageMenuPosition();
+      }
+      this.languageMenuOpen = !this.languageMenuOpen;
+    },
+    selectLanguage(lang) {
+      this.setLanguage(lang);
+      this.languageMenuOpen = false;
+    },
+    updateLanguageMenuPosition() {
+      const buttonEl = this.$refs.languageMenuButton;
+      if (!buttonEl) return;
+
+      const rect = buttonEl.getBoundingClientRect();
+      const menuWidth = 176;
+      const viewportPadding = 8;
+      let left = rect.right - menuWidth;
+
+      if (left < viewportPadding) {
+        left = viewportPadding;
+      }
+
+      const maxLeft = window.innerWidth - menuWidth - viewportPadding;
+      if (left > maxLeft) {
+        left = Math.max(viewportPadding, maxLeft);
+      }
+
+      this.languageMenuPosition = {
+        top: rect.bottom + 4,
+        left,
+        width: menuWidth,
+      };
+    },
+    setLanguage(lang) {
+      if (!i18n.availableLocales.includes(lang)) return;
+      this.uiLanguage = lang;
+      i18n.locale = lang;
+      localStorage.setItem('lang', lang);
+    },
   },
   filters: {
     bytes,
@@ -402,6 +573,23 @@ new Vue({
     },
   },
   mounted() {
+    this.handleGlobalClick = (event) => {
+      if (!this.languageMenuOpen) return;
+      const menuEl = this.$refs.languageMenu;
+      if (menuEl && !menuEl.contains(event.target)) {
+        this.languageMenuOpen = false;
+      }
+    };
+    this.handleViewportChange = () => {
+      if (this.languageMenuOpen) {
+        this.updateLanguageMenuPosition();
+      }
+    };
+    document.addEventListener('click', this.handleGlobalClick);
+    document.addEventListener('touchstart', this.handleGlobalClick);
+    window.addEventListener('resize', this.handleViewportChange);
+    window.addEventListener('scroll', this.handleViewportChange, true);
+
     this.prefersDarkScheme.addListener(this.handlePrefersChange);
     this.setTheme(this.uiTheme);
 
@@ -476,17 +664,23 @@ new Vue({
         this.avatarSettings = res;
       })
       .catch(() => {
-          this.avatarSettings = {
-            'dicebear': null,
-            'gravatar': false,
-          };
+        this.avatarSettings = {
+          dicebear: null,
+          gravatar: false,
+        };
       });
 
     Promise.resolve().then(async () => {
-      const lang = await this.api.getLang();
-      if (lang !== localStorage.getItem('lang') && i18n.availableLocales.includes(lang)) {
-        localStorage.setItem('lang', lang);
-        i18n.locale = lang;
+      const savedLang = localStorage.getItem('lang');
+      if (savedLang && i18n.availableLocales.includes(savedLang)) {
+        this.setLanguage(savedLang);
+      } else {
+        const lang = await this.api.getLang();
+        if (i18n.availableLocales.includes(lang)) {
+          this.setLanguage(lang);
+        } else {
+          this.setLanguage('en');
+        }
       }
 
       const currentRelease = await this.api.getRelease();
@@ -510,6 +704,16 @@ new Vue({
       this.latestRelease = latestRelease;
     }).catch((err) => console.error(err));
   },
+  beforeDestroy() {
+    if (this.handleGlobalClick) {
+      document.removeEventListener('click', this.handleGlobalClick);
+      document.removeEventListener('touchstart', this.handleGlobalClick);
+    }
+    if (this.handleViewportChange) {
+      window.removeEventListener('resize', this.handleViewportChange);
+      window.removeEventListener('scroll', this.handleViewportChange, true);
+    }
+  },
   computed: {
     chartOptionsTX() {
       const opts = {
@@ -531,6 +735,35 @@ new Vue({
     },
     updateCharts() {
       return this.uiChartType > 0 && this.uiShowCharts;
+    },
+    highlightedConfigText() {
+      if (typeof this.configText !== 'string') {
+        return '';
+      }
+
+      return this.configText
+        .split('\n')
+        .map((line) => this.highlightConfigLine(line))
+        .join('\n');
+    },
+    languageOptions() {
+      return i18n.availableLocales.map((code) => ({
+        code,
+        label: LANGUAGE_LABELS[code] || code.toUpperCase(),
+      }));
+    },
+    currentLanguageLabel() {
+      const selected = this.languageOptions.find((lang) => lang.code === this.uiLanguage);
+      return selected ? selected.label : this.uiLanguage.toUpperCase();
+    },
+    languageMenuStyle() {
+      return {
+        position: 'fixed',
+        top: `${this.languageMenuPosition.top}px`,
+        left: `${this.languageMenuPosition.left}px`,
+        width: `${this.languageMenuPosition.width}px`,
+        zIndex: 1000,
+      };
     },
     theme() {
       if (this.uiTheme === 'auto') {

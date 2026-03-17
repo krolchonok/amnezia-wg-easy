@@ -81,6 +81,21 @@ const isPasswordValid = (password, hash, plainPassword) => {
   return false;
 };
 
+const getClientIp = (req) => {
+  const forwardedFor = req.headers['x-forwarded-for'];
+  if (typeof forwardedFor === 'string' && forwardedFor.length > 0) {
+    return forwardedFor.split(',')[0].trim();
+  }
+
+  if (Array.isArray(forwardedFor) && forwardedFor.length > 0) {
+    return forwardedFor[0];
+  }
+
+  return req.socket?.remoteAddress || 'unknown';
+};
+
+const sessionSecret = crypto.randomBytes(256).toString('hex');
+
 const cronJobEveryMinute = async () => {
   await WireGuard.cronJobEveryMinute();
   setTimeout(cronJobEveryMinute, 60 * 1000);
@@ -93,10 +108,35 @@ module.exports = class Server {
     this.app = app;
 
     app.use(fromNodeMiddleware(expressSession({
-      secret: crypto.randomBytes(256).toString('hex'),
-      resave: true,
-      saveUninitialized: true,
+      name: 'amneziawg.sid',
+      secret: sessionSecret,
+      resave: false,
+      saveUninitialized: false,
+      proxy: SSL_ENABLED,
+      cookie: {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: SSL_ENABLED,
+      },
     })));
+
+    app.use(fromNodeMiddleware((req, res, next) => {
+      const startedAt = Date.now();
+      res.on('finish', () => {
+        if (res.statusCode !== 403 && res.statusCode !== 404) {
+          return;
+        }
+        if (!req.url.startsWith('/api/') && !req.url.startsWith('/cnf/')) {
+          return;
+        }
+
+        const clientIp = getClientIp(req);
+        const userAgent = req.headers['user-agent'] || '-';
+        // eslint-disable-next-line no-console
+        console.warn(`[HTTP ${res.statusCode}] ${req.method} ${req.url} ip=${clientIp} ua="${userAgent}" duration_ms=${Date.now() - startedAt}`);
+      });
+      next();
+    }));
 
     const router = createRouter();
     app.use(router);
@@ -147,7 +187,7 @@ module.exports = class Server {
         return {
           dicebear: DICEBEAR_TYPE,
           gravatar: USE_GRAVATAR,
-        }
+        };
       }))
 
       // Authentication
@@ -198,13 +238,28 @@ module.exports = class Server {
           });
         }
 
-        if (MAX_AGE && remember) {
-          event.node.req.session.cookie.maxAge = MAX_AGE;
-        }
-        event.node.req.session.authenticated = true;
-        event.node.req.session.save();
+        await new Promise((resolve, reject) => {
+          event.node.req.session.regenerate((err) => {
+            if (err) {
+              reject(err);
+              return;
+            }
 
-        debug(`New Session: ${event.node.req.session.id}`);
+            if (MAX_AGE && remember) {
+              event.node.req.session.cookie.maxAge = MAX_AGE;
+            }
+            event.node.req.session.authenticated = true;
+            event.node.req.session.save((saveErr) => {
+              if (saveErr) {
+                reject(saveErr);
+                return;
+              }
+
+              debug(`New Session: ${event.node.req.session.id}`);
+              resolve();
+            });
+          });
+        });
 
         return { success: true };
       }));
@@ -270,8 +325,7 @@ module.exports = class Server {
         return config;
       }))
       .post('/api/wireguard/client', defineEventHandler(async (event) => {
-        const { name } = await readBody(event);
-        const { expiredDate } = await readBody(event);
+        const { name, expiredDate } = await readBody(event);
         await WireGuard.createClient({ name, expiredDate });
         return { success: true };
       }))

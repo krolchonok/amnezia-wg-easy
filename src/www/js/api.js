@@ -124,6 +124,22 @@ class API {
     })));
   }
 
+  async getClientConfiguration({ clientId }) {
+    const res = await fetch(`./api/wireguard/client/${clientId}/configuration`);
+
+    if (!res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const json = await res.json();
+        throw new Error(json.error || res.statusText);
+      }
+
+      throw new Error(await res.text() || res.statusText);
+    }
+
+    return res.text();
+  }
+
   async createClient({ name, expiredDate }) {
     return this.call({
       method: 'post',

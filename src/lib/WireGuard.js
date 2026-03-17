@@ -44,6 +44,71 @@ module.exports = class WireGuard {
     this.__resolvedWgHost = null;
   }
 
+  __normalizeClientName(name) {
+    if (typeof name !== 'string') {
+      throw new ServerError('Missing: Name', 400);
+    }
+
+    const normalizedName = name.trim();
+    if (!normalizedName) {
+      throw new ServerError('Missing: Name', 400);
+    }
+
+    if (normalizedName.length > 64) {
+      throw new ServerError('Name too long', 400);
+    }
+
+    if ([...normalizedName].some((char) => {
+      const code = char.charCodeAt(0);
+      return code < 32 || code === 127;
+    })) {
+      throw new ServerError('Name contains invalid control characters', 400);
+    }
+
+    return normalizedName;
+  }
+
+  __escapePrometheusLabelValue(value) {
+    return String(value)
+      .replace(/\\/g, '\\\\')
+      .replace(/\n/g, '\\n')
+      .replace(/"/g, '\\"');
+  }
+
+  __assertValidRestoreConfig(config) {
+    if (!config || typeof config !== 'object' || Array.isArray(config)) {
+      throw new ServerError('Invalid backup format', 400);
+    }
+
+    if (!config.server || typeof config.server !== 'object' || Array.isArray(config.server)) {
+      throw new ServerError('Invalid backup format', 400);
+    }
+
+    if (!config.clients || typeof config.clients !== 'object' || Array.isArray(config.clients)) {
+      throw new ServerError('Invalid backup format', 400);
+    }
+
+    for (const field of ['privateKey', 'publicKey', 'address']) {
+      if (typeof config.server[field] !== 'string' || config.server[field].length === 0) {
+        throw new ServerError('Invalid backup format', 400);
+      }
+    }
+
+    for (const client of Object.values(config.clients)) {
+      if (!client || typeof client !== 'object' || Array.isArray(client)) {
+        throw new ServerError('Invalid backup format', 400);
+      }
+
+      if (typeof client.name !== 'string' || typeof client.address !== 'string' || typeof client.publicKey !== 'string') {
+        throw new ServerError('Invalid backup format', 400);
+      }
+
+      if (typeof client.enabled !== 'boolean') {
+        throw new ServerError('Invalid backup format', 400);
+      }
+    }
+  }
+
   async __fetchPublicIp(url) {
     return new Promise((resolve, reject) => {
       const req = https.get(url, {
@@ -317,8 +382,7 @@ ${client.preSharedKey ? `PresharedKey = ${client.preSharedKey}\n` : ''
     const config = await this.getConfig();
     const client = await this.getClient({ clientId });
 
-    return `
-[Interface]
+    return `[Interface]
 PrivateKey = ${client.privateKey ? `${client.privateKey}` : 'REPLACE_ME'}
 Address = ${client.address}/24
 ${WG_DEFAULT_DNS ? `DNS = ${WG_DEFAULT_DNS}\n` : ''}\
@@ -350,9 +414,7 @@ Endpoint = ${this.__resolvedWgHost}:${WG_CONFIG_PORT}`;
   }
 
   async createClient({ name, expiredDate }) {
-    if (!name) {
-      throw new Error('Missing: Name');
-    }
+    const normalizedName = this.__normalizeClientName(name);
 
     const config = await this.getConfig();
 
@@ -382,7 +444,7 @@ Endpoint = ${this.__resolvedWgHost}:${WG_CONFIG_PORT}`;
     const id = crypto.randomUUID();
     const client = {
       id,
-      name,
+      name: normalizedName,
       address,
       privateKey,
       publicKey,
@@ -453,7 +515,7 @@ Endpoint = ${this.__resolvedWgHost}:${WG_CONFIG_PORT}`;
   async updateClientName({ clientId, name }) {
     const client = await this.getClient({ clientId });
 
-    client.name = name;
+    client.name = this.__normalizeClientName(name);
     client.updatedAt = new Date();
 
     await this.saveConfig();
@@ -496,6 +558,7 @@ Endpoint = ${this.__resolvedWgHost}:${WG_CONFIG_PORT}`;
   async restoreConfiguration(config) {
     debug('Starting configuration restore process.');
     const _config = JSON.parse(config);
+    this.__assertValidRestoreConfig(_config);
     await this.__saveConfig(_config);
     await this.__reloadConfig();
     debug('Configuration restore process completed.');
@@ -562,9 +625,11 @@ Endpoint = ${this.__resolvedWgHost}:${WG_CONFIG_PORT}`;
       if (client.endpoint !== null) {
         wireguardConnectedPeersCount++;
       }
-      wireguardSentBytes += `wireguard_sent_bytes{interface="wg0",enabled="${client.enabled}",address="${client.address}",name="${client.name}"} ${Number(client.transferTx)}\n`;
-      wireguardReceivedBytes += `wireguard_received_bytes{interface="wg0",enabled="${client.enabled}",address="${client.address}",name="${client.name}"} ${Number(client.transferRx)}\n`;
-      wireguardLatestHandshakeSeconds += `wireguard_latest_handshake_seconds{interface="wg0",enabled="${client.enabled}",address="${client.address}",name="${client.name}"} ${client.latestHandshakeAt ? (new Date().getTime() - new Date(client.latestHandshakeAt).getTime()) / 1000 : 0}\n`;
+      const escapedAddress = this.__escapePrometheusLabelValue(client.address);
+      const escapedName = this.__escapePrometheusLabelValue(client.name);
+      wireguardSentBytes += `wireguard_sent_bytes{interface="wg0",enabled="${client.enabled}",address="${escapedAddress}",name="${escapedName}"} ${Number(client.transferTx)}\n`;
+      wireguardReceivedBytes += `wireguard_received_bytes{interface="wg0",enabled="${client.enabled}",address="${escapedAddress}",name="${escapedName}"} ${Number(client.transferRx)}\n`;
+      wireguardLatestHandshakeSeconds += `wireguard_latest_handshake_seconds{interface="wg0",enabled="${client.enabled}",address="${escapedAddress}",name="${escapedName}"} ${client.latestHandshakeAt ? (new Date().getTime() - new Date(client.latestHandshakeAt).getTime()) / 1000 : 0}\n`;
     }
 
     let returnText = '# HELP wg-easy and wireguard metrics\n';
