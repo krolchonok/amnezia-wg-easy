@@ -302,7 +302,7 @@ module.exports = class Server {
         debug(`Deleted Session: ${sessionId}`);
         return { success: true };
       }))
-      .get('/api/wireguard/client', defineEventHandler(() => {
+      .get('/api/wireguard/client', defineEventHandler(async () => {
         return WireGuard.getClients();
       }))
       .get('/api/wireguard/client/:clientId/qrcode.svg', defineEventHandler(async (event) => {
