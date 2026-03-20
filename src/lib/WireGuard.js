@@ -10,6 +10,7 @@ const CRC32 = require('crc-32');
 
 const Util = require('./Util');
 const ServerError = require('./ServerError');
+const TrafficHistory = require('./TrafficHistory');
 
 const {
   WG_PATH,
@@ -27,6 +28,11 @@ const {
   WG_POST_DOWN,
   WG_ENABLE_EXPIRES_TIME,
   WG_ENABLE_ONE_TIME_LINKS,
+  TRAFFIC_HISTORY_ENABLED,
+  TRAFFIC_SAMPLE_INTERVAL_SECONDS,
+  TRAFFIC_RAW_RETENTION_HOURS,
+  TRAFFIC_MINUTE_RETENTION_DAYS,
+  TRAFFIC_HOUR_RETENTION_DAYS,
   JC,
   JMIN,
   JMAX,
@@ -42,6 +48,58 @@ module.exports = class WireGuard {
 
   constructor() {
     this.__resolvedWgHost = null;
+    this.__trafficSamplerEnabled = TRAFFIC_HISTORY_ENABLED === 'true';
+    this.__trafficSamplerStarted = false;
+    this.__trafficSamplerTimer = null;
+    this.__trafficHistory = new TrafficHistory({
+      basePath: WG_PATH,
+      sampleIntervalSeconds: TRAFFIC_SAMPLE_INTERVAL_SECONDS,
+      rawRetentionHours: TRAFFIC_RAW_RETENTION_HOURS,
+      minuteRetentionDays: TRAFFIC_MINUTE_RETENTION_DAYS,
+      hourRetentionDays: TRAFFIC_HOUR_RETENTION_DAYS,
+    });
+  }
+
+  async startTrafficHistorySampler() {
+    if (!this.__trafficSamplerEnabled || this.__trafficSamplerStarted) {
+      return;
+    }
+
+    this.__trafficSamplerStarted = true;
+    await this.__trafficHistory.init();
+
+    const tick = async () => {
+      if (!this.__trafficSamplerStarted) {
+        return;
+      }
+
+      try {
+        const clients = await this.getClients();
+        await this.__trafficHistory.recordClients(clients);
+      } catch (err) {
+        debug(`Traffic sampler failed: ${err.message}`);
+      } finally {
+        if (this.__trafficSamplerStarted) {
+          this.__trafficSamplerTimer = setTimeout(tick, TRAFFIC_SAMPLE_INTERVAL_SECONDS * 1000);
+        }
+      }
+    };
+
+    await tick();
+  }
+
+  async stopTrafficHistorySampler() {
+    this.__trafficSamplerStarted = false;
+    if (this.__trafficSamplerTimer) {
+      clearTimeout(this.__trafficSamplerTimer);
+      this.__trafficSamplerTimer = null;
+    }
+
+    if (this.__trafficSamplerEnabled) {
+      await this.__trafficHistory.flush().catch((err) => {
+        debug(`Traffic sampler flush failed: ${err.message}`);
+      });
+    }
   }
 
   __normalizeClientName(name) {
@@ -670,6 +728,8 @@ Endpoint = ${this.__resolvedWgHost}:${WG_CONFIG_PORT}`;
     let wireguardPeerCount = 0;
     let wireguardEnabledPeersCount = 0;
     let wireguardConnectedPeersCount = 0;
+    const latestClients = this.__trafficHistory.getLatestClients();
+    const latestByClientId = new Map(latestClients.map((client) => [client.clientId, client]));
     for (const client of Object.values(clients)) {
       wireguardPeerCount++;
       if (client.enabled === true) {
@@ -683,7 +743,61 @@ Endpoint = ${this.__resolvedWgHost}:${WG_CONFIG_PORT}`;
       wireguard_configured_peers: Number(wireguardPeerCount),
       wireguard_enabled_peers: Number(wireguardEnabledPeersCount),
       wireguard_connected_peers: Number(wireguardConnectedPeersCount),
+      traffic_history_enabled: this.__trafficSamplerEnabled,
+      traffic_sample_interval_seconds: TRAFFIC_SAMPLE_INTERVAL_SECONDS,
+      clients: clients.map((client) => {
+        const latest = latestByClientId.get(client.id);
+        return {
+          id: client.id,
+          name: client.name,
+          address: client.address,
+          enabled: client.enabled,
+          connected: client.endpoint !== null,
+          sent_bytes: Number(client.transferTx || 0),
+          received_bytes: Number(client.transferRx || 0),
+          latest_handshake_seconds: client.latestHandshakeAt
+            ? (new Date().getTime() - new Date(client.latestHandshakeAt).getTime()) / 1000
+            : 0,
+          tx_bytes_per_second: latest ? latest.txRate : null,
+          rx_bytes_per_second: latest ? latest.rxRate : null,
+          sampled_at: latest ? new Date(latest.ts).toISOString() : null,
+        };
+      }),
     };
+  }
+
+  async getTrafficOverview() {
+    return {
+      enabled: this.__trafficSamplerEnabled,
+      sampleIntervalSeconds: TRAFFIC_SAMPLE_INTERVAL_SECONDS,
+      rawRetentionHours: TRAFFIC_RAW_RETENTION_HOURS,
+      minuteRetentionDays: TRAFFIC_MINUTE_RETENTION_DAYS,
+      hourRetentionDays: TRAFFIC_HOUR_RETENTION_DAYS,
+      clients: this.__trafficHistory.getLatestClients().map((client) => ({
+        ...client,
+        sampledAt: new Date(client.ts).toISOString(),
+      })),
+    };
+  }
+
+  async getClientTrafficHistory({
+    clientId,
+    period = 'day',
+  }) {
+    await this.getClient({ clientId });
+
+    if (!this.__trafficSamplerEnabled) {
+      throw new ServerError('Traffic history is disabled', 400);
+    }
+
+    if (!['day', 'week', 'month'].includes(period)) {
+      throw new ServerError(`Unsupported traffic period: ${period}`, 400);
+    }
+
+    return this.__trafficHistory.getClientHistory({
+      clientId,
+      period,
+    });
   }
 
 };

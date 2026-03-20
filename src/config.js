@@ -47,6 +47,11 @@ module.exports.PROMETHEUS_METRICS_PASSWORD = process.env.PROMETHEUS_METRICS_PASS
   || process.env.PROMETHEUS_METRICS_PASSWORD_PLAIN;
 module.exports.PROMETHEUS_METRICS_PASSWORD_HASH = process.env.PROMETHEUS_METRICS_PASSWORD_HASH
   || process.env.PROMETHEUS_METRICS_PASSWORD_BCRYPT;
+module.exports.TRAFFIC_HISTORY_ENABLED = process.env.TRAFFIC_HISTORY_ENABLED || 'false';
+module.exports.TRAFFIC_SAMPLE_INTERVAL_SECONDS = Math.max(1, parseInt(process.env.TRAFFIC_SAMPLE_INTERVAL_SECONDS, 10) || 1);
+module.exports.TRAFFIC_RAW_RETENTION_HOURS = Math.max(1, parseInt(process.env.TRAFFIC_RAW_RETENTION_HOURS, 10) || 24);
+module.exports.TRAFFIC_MINUTE_RETENTION_DAYS = Math.max(1, parseInt(process.env.TRAFFIC_MINUTE_RETENTION_DAYS, 10) || 90);
+module.exports.TRAFFIC_HOUR_RETENTION_DAYS = Math.max(1, parseInt(process.env.TRAFFIC_HOUR_RETENTION_DAYS, 10) || 365);
 
 if (module.exports.PASSWORD_HASH && module.exports.PASSWORD) {
   // eslint-disable-next-line no-console

@@ -424,6 +424,17 @@
                       </svg>
                     </button>
 
+                    <!-- Traffic Stats -->
+                    <button
+                      class="align-middle inline-block bg-gray-100 dark:bg-neutral-600 dark:text-neutral-300 p-2 rounded transition hover:bg-red-800 dark:hover:bg-red-800 hover:text-white dark:hover:text-white"
+                      :title="$t('traffic.title')" @click="openClientTraffic(client)">
+                      <svg class="w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M3 3v18h18M7 14l3-3 3 2 4-6" />
+                      </svg>
+                    </button>
+
                     <!-- Short OneTime Link -->
                     <button v-if="enableOneTimeLinks" :disabled="!client.downloadableConfig"
                       class="align-middle inline-block bg-gray-100 dark:bg-neutral-600 dark:text-neutral-300 p-2 rounded transition"
@@ -523,6 +534,92 @@
                   class="align-middle inline-block bg-gray-100 dark:bg-neutral-600 dark:text-neutral-300 px-4 py-2 rounded transition hover:bg-red-800 dark:hover:bg-red-800 hover:text-white dark:hover:text-white">
                   {{$t('copyConfig')}}
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Traffic Stats -->
+        <div v-if="trafficClient !== null">
+          <div class="bg-black bg-opacity-50 fixed top-0 right-0 left-0 bottom-0 p-2 sm:p-4 flex items-center justify-center z-20">
+            <div class="bg-white dark:bg-neutral-700 rounded-md shadow-lg relative p-4 sm:p-6 w-full overflow-hidden"
+              style="max-width: 76rem; height: 88vh; display: flex; flex-direction: column;">
+              <button @click="closeClientTraffic"
+                class="absolute right-4 top-4 text-gray-600 dark:text-neutral-500 hover:text-gray-800 dark:hover:text-neutral-300">
+                <svg class="w-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <div class="pr-12 mb-4">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-neutral-200">
+                  {{$t('traffic.title')}}: {{ trafficClient.name }}
+                </h3>
+                <p class="text-sm text-gray-500 dark:text-neutral-400 mt-1">
+                  {{trafficRangeLabel}}
+                </p>
+              </div>
+
+              <div class="flex flex-wrap gap-2 mb-4">
+                <button v-for="period in ['day', 'week', 'month']" :key="period"
+                  @click="loadClientTraffic(period)"
+                  class="px-3 py-1.5 rounded-full text-sm border transition"
+                  :class="trafficHistoryPeriod === period
+                    ? 'bg-red-800 border-red-800 text-white'
+                    : 'bg-gray-50 dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 text-gray-700 dark:text-neutral-200 hover:border-red-800 hover:text-red-800 dark:hover:text-red-300'">
+                  {{formatTrafficPeriodLabel(period)}}
+                </button>
+              </div>
+
+              <div v-if="trafficHistoryLoading" class="flex-1 flex items-center justify-center text-gray-500 dark:text-neutral-400">
+                <svg class="w-5 animate-spin mr-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                  fill="currentColor">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z">
+                  </path>
+                </svg>
+                {{$t('traffic.loading')}}
+              </div>
+
+              <div v-else-if="trafficHistoryError" class="flex-1 flex items-center justify-center">
+                <p class="text-sm text-red-700 dark:text-red-300">{{trafficHistoryError}}</p>
+              </div>
+
+              <div v-else-if="trafficHistory" class="flex-1 overflow-y-auto">
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
+                  <div v-for="card in trafficHistorySummaryCards" :key="card.label"
+                    class="rounded-xl border border-gray-100 dark:border-neutral-600 bg-gray-50 dark:bg-neutral-800 p-4">
+                    <div class="text-xs uppercase tracking-wide text-gray-400 dark:text-neutral-500">{{card.label}}</div>
+                    <div class="mt-2 text-lg font-medium text-gray-900 dark:text-neutral-100">{{card.value}}</div>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+                  <div class="rounded-xl border border-gray-100 dark:border-neutral-600 bg-gray-50 dark:bg-neutral-800 p-4">
+                    <div class="text-sm font-medium text-gray-900 dark:text-neutral-100 mb-3">{{$t('traffic.downloadRate')}}</div>
+                    <apexchart height="240" :options="trafficRxChartOptions" :series="trafficRxChartSeries"></apexchart>
+                  </div>
+                  <div class="rounded-xl border border-gray-100 dark:border-neutral-600 bg-gray-50 dark:bg-neutral-800 p-4">
+                    <div class="text-sm font-medium text-gray-900 dark:text-neutral-100 mb-3">{{$t('traffic.uploadRate')}}</div>
+                    <apexchart height="240" :options="trafficTxChartOptions" :series="trafficTxChartSeries"></apexchart>
+                  </div>
+                </div>
+
+                <div class="rounded-xl border border-gray-100 dark:border-neutral-600 bg-gray-50 dark:bg-neutral-800 p-4">
+                  <div class="flex items-center justify-between gap-3 mb-3">
+                    <div class="text-sm font-medium text-gray-900 dark:text-neutral-100">{{$t('traffic.liveSnapshot')}}</div>
+                    <div v-if="trafficHistory.live" class="text-xs text-gray-400 dark:text-neutral-500">
+                      {{dateTime(trafficHistory.live.sampledAt)}}
+                    </div>
+                  </div>
+                  <div v-if="trafficHistory.live" class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <div class="text-gray-600 dark:text-neutral-300">{{$t('traffic.currentDownloadRate')}}: <span class="text-gray-900 dark:text-neutral-100">{{formatRateValue(trafficHistory.live.rxRate)}}</span></div>
+                    <div class="text-gray-600 dark:text-neutral-300">{{$t('traffic.currentUploadRate')}}: <span class="text-gray-900 dark:text-neutral-100">{{formatRateValue(trafficHistory.live.txRate)}}</span></div>
+                    <div class="text-gray-600 dark:text-neutral-300">{{$t('traffic.totalDownloaded')}}: <span class="text-gray-900 dark:text-neutral-100">{{formatBytesValue(trafficHistory.live.rxTotal)}}</span></div>
+                    <div class="text-gray-600 dark:text-neutral-300">{{$t('traffic.totalUploaded')}}: <span class="text-gray-900 dark:text-neutral-100">{{formatBytesValue(trafficHistory.live.txTotal)}}</span></div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

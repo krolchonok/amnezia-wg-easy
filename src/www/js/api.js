@@ -140,6 +140,20 @@ class API {
     return res.text();
   }
 
+  async getClientTraffic({ clientId, period }) {
+    return this.call({
+      method: 'get',
+      path: `/wireguard/client/${clientId}/traffic?period=${encodeURIComponent(period)}`,
+    });
+  }
+
+  async getTrafficOverview() {
+    return this.call({
+      method: 'get',
+      path: '/wireguard/traffic',
+    });
+  }
+
   async createClient({ name, expiredDate }) {
     return this.call({
       method: 'post',

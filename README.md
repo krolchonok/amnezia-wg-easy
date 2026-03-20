@@ -112,8 +112,8 @@ docker compose up -d
 
 ## Конфигурация `.env`
 
-- Шаблон: `.env_example`
-- Полный список переменных: `ENV_VARIABLES.md`
+- Шаблон: [.env_example](/root/amnezia-wg-easy/.env_example)
+- Полный список переменных: [ENV_VARIABLES.md](/root/amnezia-wg-easy/ENV_VARIABLES.md)
 
 Минимум для запуска:
 
@@ -126,8 +126,34 @@ WG_HOST=your.public.ip.or.domain
 ```env
 PASSWORD=your_strong_password
 # или
-# PASSWORD_HASH=$$2a$$12$$...
+# PASSWORD_HASH=$2a$12$...
 ```
+
+Короткая расшифровка основных переменных:
+
+- `WG_HOST` — публичный IP или домен сервера, который попадёт в клиентские конфиги.
+- `PORT` — TCP-порт Web UI и HTTPS/HTTP, по умолчанию `51821`.
+- `WG_PORT` — UDP-порт WireGuard, по умолчанию `51820`.
+- `WG_CONFIG_PORT` — порт в `Endpoint` клиентского конфига, если снаружи используется порт, отличный от внутреннего `WG_PORT`.
+- `PASSWORD` — пароль админки в открытом виде.
+- `PASSWORD_HASH` — bcrypt-хэш пароля админки; для `.env` используйте обычный вид с одиночными `$`.
+- `LANG` — язык интерфейса, например `ru` или `en`.
+- `WG_DEFAULT_DNS` — DNS, который будет прописан клиентам.
+- `WG_ALLOWED_IPS` — сети, которые пойдут через VPN; по умолчанию весь трафик: `0.0.0.0/0, ::/0`.
+- `WG_ENABLE_ONE_TIME_LINKS` — включает одноразовые ссылки на скачивание `.conf`.
+- `WG_ENABLE_EXPIRES_TIME` — включает дату истечения клиентов.
+- `UI_TRAFFIC_STATS` — показывает расширенную статистику RX/TX в UI.
+- `UI_CHART_TYPE` — тип мини-графиков трафика: `0=off`, `1=line`, `2=area`, `3=bar`.
+- `UI_ENABLE_SORT_CLIENTS` — включает сортировку клиентов в интерфейсе.
+- `MAX_AGE` — время жизни сессии в минутах, `0` означает до закрытия браузера.
+- `SSL_ENABLED` — включает HTTPS.
+- `SSL_CERT_PATH` / `SSL_KEY_PATH` — пути к сертификату и ключу внутри контейнера.
+- `ENABLE_PROMETHEUS_METRICS` — включает `/metrics` и `/metrics/json`.
+- `PROMETHEUS_METRICS_PASSWORD` / `PROMETHEUS_METRICS_PASSWORD_HASH` — защита метрик по Basic Auth.
+- `TRAFFIC_HISTORY_ENABLED` — включает локальное хранение трафика и скоростей.
+- `TRAFFIC_SAMPLE_INTERVAL_SECONDS` — интервал сэмплирования, по умолчанию `1`.
+- `TRAFFIC_RAW_RETENTION_HOURS` — сколько хранить сырые 1-секундные samples, по умолчанию `24`.
+- `TRAFFIC_MINUTE_RETENTION_DAYS` / `TRAFFIC_HOUR_RETENTION_DAYS` — сколько хранить минутные и часовые агрегаты.
 
 ## WG_HOST=auto
 
@@ -230,6 +256,40 @@ curl -k -u anyuser:YOUR_PASSWORD https://<HOST>:<PORT>/metrics
 - `https://<HOST>:<PORT>/metrics/json`
 
 Для быстрого старта проще использовать `/metrics/json` + JSONPath preprocessing.
+
+## Локальная история трафика
+
+Можно включить локальное хранение трафика и скоростей без внешней БД:
+
+```env
+TRAFFIC_HISTORY_ENABLED=true
+TRAFFIC_SAMPLE_INTERVAL_SECONDS=1
+TRAFFIC_RAW_RETENTION_HOURS=24
+TRAFFIC_MINUTE_RETENTION_DAYS=90
+TRAFFIC_HOUR_RETENTION_DAYS=365
+```
+
+Как это работает:
+
+- raw 1-second samples хранятся 24 часа
+- минутные агрегаты используются для недели
+- часовые агрегаты используются для месяца и долгой истории
+- файлы лежат в `${WG_PATH}/traffic-history`
+
+API:
+
+- `GET /api/wireguard/traffic` — live snapshot по клиентам
+- `GET /api/wireguard/client/:clientId/traffic?period=day`
+- `GET /api/wireguard/client/:clientId/traffic?period=week`
+- `GET /api/wireguard/client/:clientId/traffic?period=month`
+
+`/metrics/json` также возвращает список `clients` с:
+
+- `sent_bytes`
+- `received_bytes`
+- `rx_bytes_per_second`
+- `tx_bytes_per_second`
+- `latest_handshake_seconds`
 
 ## Отладка
 

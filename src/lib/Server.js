@@ -18,6 +18,7 @@ const {
   createRouter,
   defineEventHandler,
   fromNodeMiddleware,
+  getQuery,
   getRouterParam,
   toNodeListener,
   readBody,
@@ -215,7 +216,12 @@ module.exports = class Server {
         const clientId = client.id;
         const config = await WireGuard.getClientConfiguration({ clientId });
         await WireGuard.eraseOneTimeLink({ clientId });
-        setHeader(event, 'Content-Disposition', `attachment; filename="${clientOneTimeLink}.conf"`);
+        const configName = client.name
+          .replace(/[^a-zA-Z0-9_=+.-]/g, '-')
+          .replace(/(-{2,}|-$)/g, '-')
+          .replace(/-$/, '')
+          .substring(0, 32);
+        setHeader(event, 'Content-Disposition', `attachment; filename="${configName || clientId}.conf"`);
         setHeader(event, 'Content-Type', 'text/plain');
         return config;
       }))
@@ -355,6 +361,17 @@ module.exports = class Server {
         }
         await WireGuard.generateOneTimeLink({ clientId });
         return { success: true };
+      }))
+      .get('/api/wireguard/traffic', defineEventHandler(async () => {
+        return WireGuard.getTrafficOverview();
+      }))
+      .get('/api/wireguard/client/:clientId/traffic', defineEventHandler(async (event) => {
+        const clientId = getRouterParam(event, 'clientId');
+        const { period } = getQuery(event);
+        return WireGuard.getClientTrafficHistory({
+          clientId,
+          period: typeof period === 'string' ? period : 'day',
+        });
       }))
       .post('/api/wireguard/client/:clientId/disable', defineEventHandler(async (event) => {
         const clientId = getRouterParam(event, 'clientId');
@@ -524,6 +541,10 @@ module.exports = class Server {
         // eslint-disable-next-line no-console
         console.log(`[HTTP] Listening on http://${WEBUI_HOST}:${PORT}`);
         cronJobEveryMinute();
+        WireGuard.startTrafficHistorySampler().catch((err) => {
+          // eslint-disable-next-line no-console
+          console.error(err);
+        });
         return;
       }
 
@@ -554,6 +575,10 @@ module.exports = class Server {
     }
 
     cronJobEveryMinute();
+    WireGuard.startTrafficHistorySampler().catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error(err);
+    });
   }
 
 };

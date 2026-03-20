@@ -79,6 +79,25 @@ Notes:
 | `PROMETHEUS_METRICS_PASSWORD_PLAIN` | `PROMETHEUS_METRICS_PASSWORD` |
 | `PROMETHEUS_METRICS_PASSWORD_BCRYPT` | `PROMETHEUS_METRICS_PASSWORD_HASH` |
 
+## Local traffic history
+
+| Variable | Default | Example | Description |
+|---|---|---|---|
+| `TRAFFIC_HISTORY_ENABLED` | `false` | `true` | Включить локальное хранение трафика и скоростей. |
+| `TRAFFIC_SAMPLE_INTERVAL_SECONDS` | `1` | `1` | Интервал сэмплирования. |
+| `TRAFFIC_RAW_RETENTION_HOURS` | `24` | `24` | Сколько хранить сырые 1-секундные данные. |
+| `TRAFFIC_MINUTE_RETENTION_DAYS` | `90` | `30` | Сколько хранить минутные агрегаты. |
+| `TRAFFIC_HOUR_RETENTION_DAYS` | `365` | `180` | Сколько хранить часовые агрегаты. |
+
+Notes:
+
+- Данные сохраняются в `${WG_PATH}/traffic-history`.
+- Для периода `day` используются raw 1s samples, для `week` минутные агрегаты, для `month` часовые агрегаты.
+- API:
+  - `GET /api/wireguard/traffic`
+  - `GET /api/wireguard/client/:clientId/traffic?period=day|week|month`
+- `/metrics/json` дополнительно возвращает список `clients` с текущими `rx_bytes_per_second` / `tx_bytes_per_second`, если sampler успел собрать данные.
+
 ## AmneziaWG obfuscation
 
 | Variable | Default | Example | Description |

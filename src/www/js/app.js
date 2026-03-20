@@ -58,6 +58,8 @@ const CHART_COLORS = {
   gradient: { light: ['rgba(0,0,0,1.0)', 'rgba(0,0,0,1.0)'], dark: ['rgba(128,128,128,0)', 'rgba(128,128,128,0)'] },
 };
 
+const TRAFFIC_PERIODS = ['day', 'week', 'month'];
+
 const LANGUAGE_LABELS = {
   en: 'English',
   ua: 'Українська',
@@ -110,6 +112,11 @@ new Vue({
     qrcode: null,
     configText: null,
     configClientName: null,
+    trafficClient: null,
+    trafficHistory: null,
+    trafficHistoryPeriod: 'day',
+    trafficHistoryLoading: false,
+    trafficHistoryError: null,
 
     currentRelease: null,
     latestRelease: null,
@@ -425,6 +432,82 @@ new Vue({
       const valueClass = valueClassesByKey[normalizedKey] || 'text-gray-900 dark:text-neutral-100';
 
       return `<span class="${keyClass}">${this.escapeHtml(key)}</span><span class="text-neutral-500"> = </span><span class="${valueClass}">${this.escapeHtml(value)}</span>`;
+    },
+    formatBytesValue(value, decimals = 2) {
+      return bytes(Number(value || 0), decimals);
+    },
+    formatRateValue(value) {
+      return `${this.formatBytesValue(value)}/s`;
+    },
+    formatTrafficPeriodLabel(period) {
+      return this.$t(`traffic.period.${period}`);
+    },
+    downsampleTrafficSeries(series, maxPoints = 240) {
+      if (!Array.isArray(series) || series.length <= maxPoints) {
+        return series;
+      }
+
+      const bucketSize = Math.ceil(series.length / maxPoints);
+      const reduced = [];
+
+      for (let index = 0; index < series.length; index += bucketSize) {
+        const bucket = series.slice(index, index + bucketSize);
+        const last = bucket[bucket.length - 1];
+        const avg = bucket.reduce((sum, point) => sum + point.y, 0) / bucket.length;
+        reduced.push({
+          x: last.x,
+          y: avg,
+        });
+      }
+
+      return reduced;
+    },
+    normalizeTrafficHistory(trafficHistory) {
+      return {
+        ...trafficHistory,
+        live: trafficHistory.live
+          ? {
+            ...trafficHistory.live,
+            sampledAt: new Date(trafficHistory.live.ts),
+          }
+          : null,
+        series: Array.isArray(trafficHistory.series)
+          ? trafficHistory.series.map((point) => ({
+            ...point,
+            sampledAt: new Date(point.ts),
+          }))
+          : [],
+      };
+    },
+    openClientTraffic(client) {
+      this.trafficClient = client;
+      this.trafficHistory = null;
+      this.trafficHistoryError = null;
+      this.loadClientTraffic('day');
+    },
+    closeClientTraffic() {
+      this.trafficClient = null;
+      this.trafficHistory = null;
+      this.trafficHistoryError = null;
+      this.trafficHistoryLoading = false;
+    },
+    loadClientTraffic(period) {
+      if (!this.trafficClient || this.trafficHistoryLoading || !TRAFFIC_PERIODS.includes(period)) return;
+
+      this.trafficHistoryPeriod = period;
+      this.trafficHistoryLoading = true;
+      this.trafficHistoryError = null;
+
+      this.api.getClientTraffic({ clientId: this.trafficClient.id, period })
+        .then((trafficHistory) => {
+          this.trafficHistory = this.normalizeTrafficHistory(trafficHistory);
+        })
+        .catch((err) => {
+          this.trafficHistoryError = err.message || err.toString();
+        })
+        .finally(() => {
+          this.trafficHistoryLoading = false;
+        });
     },
     async copyClientConfiguration() {
       if (!this.configText) return;
@@ -745,6 +828,146 @@ new Vue({
         .split('\n')
         .map((line) => this.highlightConfigLine(line))
         .join('\n');
+    },
+    trafficHistorySummaryCards() {
+      if (!this.trafficHistory || !this.trafficHistory.summary) {
+        return [];
+      }
+
+      const { summary, live } = this.trafficHistory;
+
+      return [
+        {
+          label: this.$t('traffic.cards.downloaded'),
+          value: this.formatBytesValue(summary.rxBytes),
+        },
+        {
+          label: this.$t('traffic.cards.uploaded'),
+          value: this.formatBytesValue(summary.txBytes),
+        },
+        {
+          label: this.$t('traffic.cards.maxDownloadRate'),
+          value: this.formatRateValue(summary.maxRxRate),
+        },
+        {
+          label: this.$t('traffic.cards.maxUploadRate'),
+          value: this.formatRateValue(summary.maxTxRate),
+        },
+        {
+          label: this.$t('traffic.cards.currentDownloadRate'),
+          value: live ? this.formatRateValue(live.rxRate) : '0 B/s',
+        },
+        {
+          label: this.$t('traffic.cards.currentUploadRate'),
+          value: live ? this.formatRateValue(live.txRate) : '0 B/s',
+        },
+      ];
+    },
+    trafficChartOptions() {
+      return {
+        chart: {
+          type: 'area',
+          background: 'transparent',
+          toolbar: {
+            show: false,
+          },
+          zoom: {
+            enabled: false,
+          },
+          animations: {
+            enabled: false,
+          },
+          foreColor: this.theme === 'dark' ? '#d4d4d8' : '#4b5563',
+        },
+        stroke: {
+          curve: 'smooth',
+          width: 2,
+        },
+        fill: {
+          type: 'gradient',
+          gradient: {
+            shadeIntensity: 0,
+            opacityFrom: 0.35,
+            opacityTo: 0.05,
+            stops: [0, 100],
+          },
+        },
+        dataLabels: {
+          enabled: false,
+        },
+        xaxis: {
+          type: 'datetime',
+          labels: {
+            datetimeUTC: false,
+          },
+        },
+        yaxis: {
+          labels: {
+            formatter: (value) => this.formatBytesValue(value),
+          },
+        },
+        tooltip: {
+          x: {
+            formatter: (_value, context) => {
+              return this.dateTime(new Date(context.w.globals.seriesX[0][context.dataPointIndex]));
+            },
+          },
+          y: {
+            formatter: (value) => this.formatRateValue(value),
+          },
+        },
+        grid: {
+          borderColor: this.theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+        },
+        legend: {
+          show: false,
+        },
+      };
+    },
+    trafficRxChartOptions() {
+      return {
+        ...this.trafficChartOptions,
+        colors: ['#2563eb'],
+      };
+    },
+    trafficTxChartOptions() {
+      return {
+        ...this.trafficChartOptions,
+        colors: ['#dc2626'],
+      };
+    },
+    trafficRxChartSeries() {
+      if (!this.trafficHistory) return [];
+
+      const points = this.trafficHistory.series.map((point) => ({
+        x: point.sampledAt.getTime(),
+        y: point.rxRateAvg || point.rxRate || 0,
+      }));
+
+      return [{
+        name: 'RX',
+        data: this.downsampleTrafficSeries(points),
+      }];
+    },
+    trafficTxChartSeries() {
+      if (!this.trafficHistory) return [];
+
+      const points = this.trafficHistory.series.map((point) => ({
+        x: point.sampledAt.getTime(),
+        y: point.txRateAvg || point.txRate || 0,
+      }));
+
+      return [{
+        name: 'TX',
+        data: this.downsampleTrafficSeries(points),
+      }];
+    },
+    trafficRangeLabel() {
+      if (!this.trafficHistory) {
+        return '';
+      }
+
+      return `${this.dateTime(new Date(this.trafficHistory.sinceAt))} - ${this.dateTime(new Date(this.trafficHistory.untilAt))}`;
     },
     languageOptions() {
       return i18n.availableLocales.map((code) => ({
