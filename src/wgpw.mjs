@@ -20,13 +20,13 @@ const generateHash = async (password, { showOriginalPassword = false } = {}) => 
     // eslint-disable-next-line no-console
     console.log('# Use this in .env');
     // eslint-disable-next-line no-console
-    console.log(`PASSWORD_HASH='${hash}'`);
+    console.log(`PASSWORD_HASH=${hash}`);
     // eslint-disable-next-line no-console
     console.log('');
     // eslint-disable-next-line no-console
     console.log('# Use this directly in docker-compose.yml environment:');
     // eslint-disable-next-line no-console
-    console.log(`PASSWORD_HASH='${composeHash}'`);
+    console.log(`PASSWORD_HASH=${composeHash}`);
   } catch (error) {
     throw new Error(`Failed to generate hash : ${error}`);
   }
