@@ -47,6 +47,19 @@ docker compose -f docker-compose.local.yml up -d --remove-orphans
 
 ## Быстрый старт (готовый образ)
 
+Опубликованный образ:
+
+- GitHub Packages: `https://github.com/users/krolchonok/packages/container/package/amnezia-wg-easy`
+- Registry: `ghcr.io/krolchonok/amnezia-wg-easy`
+
+Загрузка образа:
+
+```bash
+docker pull ghcr.io/krolchonok/amnezia-wg-easy
+```
+
+Запуск через `docker run`:
+
 ```bash
 docker run -d \
   --name=amnezia-wg-easy \
@@ -62,6 +75,39 @@ docker run -d \
   --device=/dev/net/tun:/dev/net/tun \
   --restart unless-stopped \
   ghcr.io/krolchonok/amnezia-wg-easy
+```
+
+Запуск через `docker compose`:
+
+```yaml
+services:
+  amnezia-wg-easy:
+    image: ghcr.io/krolchonok/amnezia-wg-easy
+    container_name: amnezia-wg-easy
+    env_file:
+      - .env
+    volumes:
+      - ./data:/etc/wireguard
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    ports:
+      - "51820:51820/udp"
+      - "51821:51821/tcp"
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+    devices:
+      - /dev/net/tun:/dev/net/tun
+```
+
+Если используете compose из этого репозитория, достаточно:
+
+```bash
+cp .env_example .env
+docker compose up -d
 ```
 
 ## Конфигурация `.env`
@@ -188,6 +234,7 @@ docker logs -f amnezia-wg-easy-local
 docker stop amnezia-wg-easy
 docker rm amnezia-wg-easy
 docker pull ghcr.io/krolchonok/amnezia-wg-easy
+docker compose up -d
 ```
 
 ## Благодарности
