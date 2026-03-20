@@ -105,3 +105,27 @@
 .dark .traffic-stat-card--orange {
   box-shadow: none;
 }
+
+.traffic-chart-card .apexcharts-xaxis-label,
+.traffic-chart-card .apexcharts-yaxis-label,
+.traffic-chart-card .apexcharts-tooltip-text,
+.traffic-chart-card .apexcharts-tooltip-series-group,
+.traffic-chart-card .apexcharts-tooltip-title {
+  color: #475569 !important;
+}
+
+.dark .traffic-chart-card .apexcharts-xaxis-label,
+.dark .traffic-chart-card .apexcharts-yaxis-label,
+.dark .traffic-chart-card .apexcharts-tooltip-text,
+.dark .traffic-chart-card .apexcharts-tooltip-series-group,
+.dark .traffic-chart-card .apexcharts-tooltip-title {
+  color: #e5e7eb !important;
+}
+
+.dark .traffic-chart-card .apexcharts-tooltip,
+.dark .traffic-chart-card .apexcharts-xaxistooltip,
+.dark .traffic-chart-card .apexcharts-yaxistooltip {
+  background: rgba(15, 23, 42, 0.96) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.35) !important;
+}
