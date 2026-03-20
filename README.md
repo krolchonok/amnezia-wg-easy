@@ -162,6 +162,19 @@ SSL_KEY_PATH=/etc/letsencrypt/live/example.com/privkey.pem
 
 ## Генерация паролей (`wgpw`)
 
+Готовый образ из GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/krolchonok/amnezia-wg-easy
+docker run --rm ghcr.io/krolchonok/amnezia-wg-easy wgpw 'YOUR_PASSWORD'
+```
+
+Интерактивно:
+
+```bash
+docker run --rm -it ghcr.io/krolchonok/amnezia-wg-easy wgpw
+```
+
 Локальный образ:
 
 ```bash
