@@ -840,30 +840,52 @@ new Vue({
         {
           label: this.$t('traffic.cards.downloaded'),
           value: this.formatBytesValue(summary.rxBytes),
+          tone: 'blue',
         },
         {
           label: this.$t('traffic.cards.uploaded'),
           value: this.formatBytesValue(summary.txBytes),
+          tone: 'red',
         },
         {
           label: this.$t('traffic.cards.maxDownloadRate'),
           value: this.formatRateValue(summary.maxRxRate),
+          tone: 'sky',
         },
         {
           label: this.$t('traffic.cards.maxUploadRate'),
           value: this.formatRateValue(summary.maxTxRate),
+          tone: 'rose',
         },
         {
           label: this.$t('traffic.cards.currentDownloadRate'),
           value: live ? this.formatRateValue(live.rxRate) : '0 B/s',
+          tone: 'indigo',
         },
         {
           label: this.$t('traffic.cards.currentUploadRate'),
           value: live ? this.formatRateValue(live.txRate) : '0 B/s',
+          tone: 'orange',
         },
       ];
     },
+    trafficResolutionLabel() {
+      if (!this.trafficHistory) {
+        return '';
+      }
+
+      return this.$t(`traffic.resolution.${this.trafficHistory.resolution}`);
+    },
+    trafficSummaryHint() {
+      if (!this.trafficHistory || !this.trafficHistory.summary) {
+        return '';
+      }
+
+      return `${this.$t('traffic.samples')}: ${this.trafficHistory.summary.sampleCount}`;
+    },
     trafficChartOptions() {
+      const isDark = this.theme === 'dark';
+
       return {
         chart: {
           type: 'area',
@@ -877,36 +899,59 @@ new Vue({
           animations: {
             enabled: false,
           },
-          foreColor: this.theme === 'dark' ? '#d4d4d8' : '#4b5563',
+          foreColor: isDark ? '#d4d4d8' : '#4b5563',
         },
         stroke: {
           curve: 'smooth',
-          width: 2,
+          width: 2.5,
         },
         fill: {
           type: 'gradient',
           gradient: {
-            shadeIntensity: 0,
-            opacityFrom: 0.35,
-            opacityTo: 0.05,
+            shade: isDark ? 'dark' : 'light',
+            shadeIntensity: 0.15,
+            opacityFrom: isDark ? 0.34 : 0.28,
+            opacityTo: 0.04,
             stops: [0, 100],
           },
         },
         dataLabels: {
           enabled: false,
         },
+        markers: {
+          size: 0,
+          hover: {
+            sizeOffset: 3,
+          },
+        },
         xaxis: {
           type: 'datetime',
           labels: {
             datetimeUTC: false,
+            style: {
+              colors: isDark ? '#a1a1aa' : '#6b7280',
+            },
+          },
+          axisBorder: {
+            show: false,
+          },
+          axisTicks: {
+            show: false,
           },
         },
         yaxis: {
           labels: {
             formatter: (value) => this.formatBytesValue(value),
+            style: {
+              colors: isDark ? '#a1a1aa' : '#6b7280',
+            },
           },
         },
         tooltip: {
+          theme: isDark ? 'dark' : 'light',
+          style: {
+            fontSize: '12px',
+          },
           x: {
             formatter: (_value, context) => {
               return this.dateTime(new Date(context.w.globals.seriesX[0][context.dataPointIndex]));
@@ -917,7 +962,8 @@ new Vue({
           },
         },
         grid: {
-          borderColor: this.theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+          borderColor: isDark ? 'rgba(255,255,255,0.09)' : 'rgba(15,23,42,0.08)',
+          strokeDashArray: 5,
         },
         legend: {
           show: false,
@@ -968,6 +1014,36 @@ new Vue({
       }
 
       return `${this.dateTime(new Date(this.trafficHistory.sinceAt))} - ${this.dateTime(new Date(this.trafficHistory.untilAt))}`;
+    },
+    trafficLiveStats() {
+      if (!this.trafficHistory || !this.trafficHistory.live) {
+        return [];
+      }
+
+      const { live } = this.trafficHistory;
+
+      return [
+        {
+          label: this.$t('traffic.currentDownloadRate'),
+          value: this.formatRateValue(live.rxRate),
+          tone: 'blue',
+        },
+        {
+          label: this.$t('traffic.currentUploadRate'),
+          value: this.formatRateValue(live.txRate),
+          tone: 'red',
+        },
+        {
+          label: this.$t('traffic.totalDownloaded'),
+          value: this.formatBytesValue(live.rxTotal),
+          tone: 'sky',
+        },
+        {
+          label: this.$t('traffic.totalUploaded'),
+          value: this.formatBytesValue(live.txTotal),
+          tone: 'rose',
+        },
+      ];
     },
     languageOptions() {
       return i18n.availableLocales.map((code) => ({

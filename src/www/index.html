@@ -541,32 +541,46 @@
 
         <!-- Traffic Stats -->
         <div v-if="trafficClient !== null">
-          <div class="bg-black bg-opacity-50 fixed top-0 right-0 left-0 bottom-0 p-2 sm:p-4 flex items-center justify-center z-20">
-            <div class="bg-white dark:bg-neutral-700 rounded-md shadow-lg relative p-4 sm:p-6 w-full overflow-hidden"
+          <div class="fixed inset-0 z-20 p-2 sm:p-4 flex items-center justify-center traffic-modal-backdrop">
+            <div class="traffic-modal-shell rounded-2xl shadow-2xl relative w-full overflow-hidden"
               style="max-width: 76rem; height: 88vh; display: flex; flex-direction: column;">
               <button @click="closeClientTraffic"
-                class="absolute right-4 top-4 text-gray-600 dark:text-neutral-500 hover:text-gray-800 dark:hover:text-neutral-300">
+                class="absolute right-4 top-4 z-10 text-gray-600 dark:text-neutral-500 hover:text-gray-800 dark:hover:text-neutral-300">
                 <svg class="w-8" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                   stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
-              <div class="pr-12 mb-4">
-                <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-neutral-200">
-                  {{$t('traffic.title')}}: {{ trafficClient.name }}
-                </h3>
-                <p class="text-sm text-gray-500 dark:text-neutral-400 mt-1">
-                  {{trafficRangeLabel}}
-                </p>
+              <div class="traffic-modal-header px-5 sm:px-7 pt-5 sm:pt-7 pb-5">
+                <div class="pr-12">
+                  <div class="flex flex-wrap items-center gap-2 mb-3">
+                    <span class="inline-flex items-center rounded-full bg-white/70 dark:bg-black/20 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-slate-600 dark:text-slate-200">
+                      {{$t('traffic.title')}}
+                    </span>
+                    <span v-if="trafficHistory" class="inline-flex items-center rounded-full bg-slate-900/5 dark:bg-white/10 px-3 py-1 text-xs text-slate-600 dark:text-slate-300">
+                      {{trafficResolutionLabel}}
+                    </span>
+                    <span v-if="trafficHistory" class="inline-flex items-center rounded-full bg-slate-900/5 dark:bg-white/10 px-3 py-1 text-xs text-slate-600 dark:text-slate-300">
+                      {{trafficSummaryHint}}
+                    </span>
+                  </div>
+                  <h3 class="text-2xl sm:text-3xl leading-tight font-semibold text-slate-950 dark:text-white">
+                    {{ trafficClient.name }}
+                  </h3>
+                  <p class="text-sm sm:text-base text-slate-600 dark:text-slate-300 mt-2 max-w-3xl">
+                    {{trafficRangeLabel}}
+                  </p>
+                </div>
               </div>
 
-              <div class="flex flex-wrap gap-2 mb-4">
+              <div class="px-5 sm:px-7 pb-5 sm:pb-6 overflow-hidden flex-1 flex flex-col">
+              <div class="traffic-period-tabs inline-flex flex-wrap gap-2 self-start p-1 rounded-2xl mb-5">
                 <button v-for="period in ['day', 'week', 'month']" :key="period"
                   @click="loadClientTraffic(period)"
-                  class="px-3 py-1.5 rounded-full text-sm border transition"
+                  class="px-4 py-2 rounded-xl text-sm font-medium transition"
                   :class="trafficHistoryPeriod === period
-                    ? 'bg-red-800 border-red-800 text-white'
-                    : 'bg-gray-50 dark:bg-neutral-800 border-gray-200 dark:border-neutral-600 text-gray-700 dark:text-neutral-200 hover:border-red-800 hover:text-red-800 dark:hover:text-red-300'">
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-sm'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-white/10'">
                   {{formatTrafficPeriodLabel(period)}}
                 </button>
               </div>
@@ -583,43 +597,57 @@
               </div>
 
               <div v-else-if="trafficHistoryError" class="flex-1 flex items-center justify-center">
-                <p class="text-sm text-red-700 dark:text-red-300">{{trafficHistoryError}}</p>
+                <div class="rounded-2xl border border-red-200 dark:border-red-900/70 bg-red-50 dark:bg-red-950/30 px-5 py-4">
+                  <p class="text-sm text-red-700 dark:text-red-300">{{trafficHistoryError}}</p>
+                </div>
               </div>
 
               <div v-else-if="trafficHistory" class="flex-1 overflow-y-auto">
-                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-5">
                   <div v-for="card in trafficHistorySummaryCards" :key="card.label"
-                    class="rounded-xl border border-gray-100 dark:border-neutral-600 bg-gray-50 dark:bg-neutral-800 p-4">
-                    <div class="text-xs uppercase tracking-wide text-gray-400 dark:text-neutral-500">{{card.label}}</div>
-                    <div class="mt-2 text-lg font-medium text-gray-900 dark:text-neutral-100">{{card.value}}</div>
+                    class="traffic-stat-card rounded-2xl p-4 sm:p-5"
+                    :class="`traffic-stat-card--${card.tone}`">
+                    <div class="text-[11px] uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{{card.label}}</div>
+                    <div class="mt-3 text-xl sm:text-2xl font-semibold text-slate-950 dark:text-white">{{card.value}}</div>
                   </div>
                 </div>
 
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
-                  <div class="rounded-xl border border-gray-100 dark:border-neutral-600 bg-gray-50 dark:bg-neutral-800 p-4">
-                    <div class="text-sm font-medium text-gray-900 dark:text-neutral-100 mb-3">{{$t('traffic.downloadRate')}}</div>
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-5">
+                  <div class="traffic-chart-card rounded-2xl p-4 sm:p-5">
+                    <div class="flex items-center justify-between gap-3 mb-3">
+                      <div class="text-sm font-medium text-slate-900 dark:text-white">{{$t('traffic.downloadRate')}}</div>
+                      <div class="text-xs text-slate-500 dark:text-slate-400">{{trafficResolutionLabel}}</div>
+                    </div>
                     <apexchart height="240" :options="trafficRxChartOptions" :series="trafficRxChartSeries"></apexchart>
                   </div>
-                  <div class="rounded-xl border border-gray-100 dark:border-neutral-600 bg-gray-50 dark:bg-neutral-800 p-4">
-                    <div class="text-sm font-medium text-gray-900 dark:text-neutral-100 mb-3">{{$t('traffic.uploadRate')}}</div>
+                  <div class="traffic-chart-card rounded-2xl p-4 sm:p-5">
+                    <div class="flex items-center justify-between gap-3 mb-3">
+                      <div class="text-sm font-medium text-slate-900 dark:text-white">{{$t('traffic.uploadRate')}}</div>
+                      <div class="text-xs text-slate-500 dark:text-slate-400">{{trafficResolutionLabel}}</div>
+                    </div>
                     <apexchart height="240" :options="trafficTxChartOptions" :series="trafficTxChartSeries"></apexchart>
                   </div>
                 </div>
 
-                <div class="rounded-xl border border-gray-100 dark:border-neutral-600 bg-gray-50 dark:bg-neutral-800 p-4">
+                <div class="traffic-live-panel rounded-2xl p-4 sm:p-5">
                   <div class="flex items-center justify-between gap-3 mb-3">
-                    <div class="text-sm font-medium text-gray-900 dark:text-neutral-100">{{$t('traffic.liveSnapshot')}}</div>
-                    <div v-if="trafficHistory.live" class="text-xs text-gray-400 dark:text-neutral-500">
+                    <div>
+                      <div class="text-sm font-medium text-slate-900 dark:text-white">{{$t('traffic.liveSnapshot')}}</div>
+                      <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">{{$t('traffic.liveDescription')}}</div>
+                    </div>
+                    <div v-if="trafficHistory.live" class="text-xs text-slate-500 dark:text-slate-400">
                       {{dateTime(trafficHistory.live.sampledAt)}}
                     </div>
                   </div>
-                  <div v-if="trafficHistory.live" class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                    <div class="text-gray-600 dark:text-neutral-300">{{$t('traffic.currentDownloadRate')}}: <span class="text-gray-900 dark:text-neutral-100">{{formatRateValue(trafficHistory.live.rxRate)}}</span></div>
-                    <div class="text-gray-600 dark:text-neutral-300">{{$t('traffic.currentUploadRate')}}: <span class="text-gray-900 dark:text-neutral-100">{{formatRateValue(trafficHistory.live.txRate)}}</span></div>
-                    <div class="text-gray-600 dark:text-neutral-300">{{$t('traffic.totalDownloaded')}}: <span class="text-gray-900 dark:text-neutral-100">{{formatBytesValue(trafficHistory.live.rxTotal)}}</span></div>
-                    <div class="text-gray-600 dark:text-neutral-300">{{$t('traffic.totalUploaded')}}: <span class="text-gray-900 dark:text-neutral-100">{{formatBytesValue(trafficHistory.live.txTotal)}}</span></div>
+                  <div v-if="trafficHistory.live" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                    <div v-for="stat in trafficLiveStats" :key="stat.label"
+                      class="rounded-xl border border-slate-200/80 dark:border-white/10 bg-white/75 dark:bg-white/5 px-4 py-3">
+                      <div class="text-[11px] uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{{stat.label}}</div>
+                      <div class="mt-2 text-base font-semibold text-slate-950 dark:text-white">{{stat.value}}</div>
+                    </div>
                   </div>
                 </div>
+              </div>
               </div>
             </div>
           </div>
