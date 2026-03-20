@@ -10,14 +10,23 @@ const generateHash = async (password, { showOriginalPassword = false } = {}) => 
   try {
     const salt = await bcrypt.genSalt(12);
     const hash = await bcrypt.hash(password, salt);
+    const composeHash = hash.replace(/\$/g, () => '$$');
     if (showOriginalPassword) {
       // eslint-disable-next-line no-console
       console.log(`ORIGINAL_PASSWORD='${password}'`);
     }
     // eslint-disable-next-line no-console
+    console.log('');
+    // eslint-disable-next-line no-console
+    console.log('# Use this in .env');
+    // eslint-disable-next-line no-console
     console.log(`PASSWORD_HASH='${hash}'`);
     // eslint-disable-next-line no-console
-    console.log(`PASSWORD_HASH_DOCKER_COMPOSE='${hash.replace(/\$/g, () => '$$')}'`);
+    console.log('');
+    // eslint-disable-next-line no-console
+    console.log('# Use this directly in docker-compose.yml environment:');
+    // eslint-disable-next-line no-console
+    console.log(`PASSWORD_HASH='${composeHash}'`);
   } catch (error) {
     throw new Error(`Failed to generate hash : ${error}`);
   }

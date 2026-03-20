@@ -192,8 +192,12 @@ docker run --rm -it amnezia-wg-easy:local wgpw
 
 ```text
 ORIGINAL_PASSWORD='...'
+
+# Use this in .env
 PASSWORD_HASH='...'
-PASSWORD_HASH_DOCKER_COMPOSE='$$2a$$...'
+
+# Use this directly in docker-compose.yml environment:
+PASSWORD_HASH='$$2a$$...'
 ```
 
 ## Мониторинг
