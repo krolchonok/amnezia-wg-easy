@@ -496,7 +496,7 @@
 
         <!-- QR Code-->
         <div v-if="qrcode">
-          <div class="bg-black bg-opacity-50 fixed top-0 right-0 left-0 bottom-0 flex items-center justify-center z-20">
+          <div class="bg-black bg-opacity-50 fixed top-0 right-0 left-0 bottom-0 flex items-center justify-center z-50">
             <div class="bg-white rounded-md shadow-lg relative p-8">
               <button @click="qrcode = null"
                 class="absolute right-4 top-4 text-gray-600 dark:text-neutral-500 hover:text-gray-800 dark:hover:text-neutral-700">
@@ -512,7 +512,7 @@
 
         <!-- Config Text -->
         <div v-if="configText !== null">
-          <div class="bg-black bg-opacity-50 fixed top-0 right-0 left-0 bottom-0 p-2 sm:p-4 flex items-center justify-center z-20">
+          <div class="bg-black bg-opacity-50 fixed top-0 right-0 left-0 bottom-0 p-2 sm:p-4 flex items-center justify-center z-50">
             <div class="bg-white dark:bg-neutral-700 rounded-md shadow-lg relative p-4 sm:p-6 w-full overflow-hidden"
               style="max-width: 72rem; height: 88vh; display: flex; flex-direction: column;">
               <button @click="closeClientConfiguration"
@@ -541,7 +541,7 @@
 
         <!-- Traffic Stats -->
         <div v-if="trafficClient !== null">
-          <div class="fixed inset-0 z-20 p-2 sm:p-4 flex items-center justify-center traffic-modal-backdrop">
+          <div class="fixed inset-0 z-50 p-2 sm:p-4 flex items-center justify-center traffic-modal-backdrop">
             <div class="traffic-modal-shell rounded-2xl shadow-2xl relative w-full overflow-hidden"
               style="max-width: 76rem; height: 88vh; display: flex; flex-direction: column;">
               <button @click="closeClientTraffic"
@@ -654,7 +654,7 @@
         </div>
 
         <!-- Create Dialog -->
-        <div v-if="clientCreate" class="fixed z-10 inset-0 overflow-y-auto">
+        <div v-if="clientCreate" class="fixed z-50 inset-0 overflow-y-auto">
           <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             <!--
         Background overlay, show/hide based on modal state.
@@ -738,7 +738,7 @@
         </div>
 
         <!-- Delete Dialog -->
-        <div v-if="clientDelete" class="fixed z-10 inset-0 overflow-y-auto">
+        <div v-if="clientDelete" class="fixed z-50 inset-0 overflow-y-auto">
           <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
             <!--
         Background overlay, show/hide based on modal state.

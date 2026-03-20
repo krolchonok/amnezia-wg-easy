@@ -359,8 +359,18 @@ new Vue({
     },
     showOneTimeLink(client) {
       this.api.showOneTimeLink({ clientId: client.id })
-        .catch((err) => alert(err.message || err.toString()))
-        .finally(() => this.refresh().catch(console.error));
+        .then(async () => {
+          await this.refresh();
+          const refreshedClient = this.clients.find((item) => item.id === client.id);
+          if (!refreshedClient || !refreshedClient.oneTimeLink) {
+            throw new Error('Failed to generate one-time link.');
+          }
+
+          const oneTimeLinkUrl = `${document.location.protocol}//${document.location.host}/cnf/${refreshedClient.oneTimeLink}`;
+          await this.copyTextToClipboard(oneTimeLinkUrl);
+          alert(this.$t('oneTimeLinkCopied'));
+        })
+        .catch((err) => alert(err.message || err.toString()));
     },
     showClientConfiguration(client) {
       this.api.getClientConfiguration({ clientId: client.id })
@@ -513,28 +523,31 @@ new Vue({
       if (!this.configText) return;
 
       try {
-        if (navigator.clipboard && window.isSecureContext) {
-          await navigator.clipboard.writeText(this.configText);
-        } else {
-          const textArea = document.createElement('textarea');
-          textArea.value = this.configText;
-          textArea.setAttribute('readonly', '');
-          textArea.style.position = 'fixed';
-          textArea.style.left = '-9999px';
-          document.body.appendChild(textArea);
-          textArea.focus();
-          textArea.select();
-          const copied = document.execCommand('copy');
-          document.body.removeChild(textArea);
-
-          if (!copied) {
-            throw new Error('Failed to copy configuration.');
-          }
-        }
-
+        await this.copyTextToClipboard(this.configText);
         alert(this.$t('configCopied'));
       } catch (err) {
         alert(err.message || err.toString());
+      }
+    },
+    async copyTextToClipboard(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return;
+      }
+
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.setAttribute('readonly', '');
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const copied = document.execCommand('copy');
+      document.body.removeChild(textArea);
+
+      if (!copied) {
+        throw new Error('Failed to copy text.');
       }
     },
     enableClient(client) {
