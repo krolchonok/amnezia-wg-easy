@@ -1,5 +1,7 @@
 # AmneziaWG Easy
 
+[![Build & Publish Latest](https://github.com/krolchonok/amnezia-wg-easy/actions/workflows/deploy.yml/badge.svg?branch=master)](https://github.com/krolchonok/amnezia-wg-easy/actions/workflows/deploy.yml?query=branch%3Amaster)
+
 Упрощенный сервер WireGuard/AmneziaWG с Web UI, HTTPS и метриками.
 
 <p align="center">
