@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: write
-      contents: read
+      contents: write
     steps:
     - uses: actions/checkout@v6
       with:
@@ -40,3 +40,33 @@ jobs:
         push: true
         platforms: linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8
         tags: ghcr.io/krolchonok/amnezia-wg-easy:latest, ghcr.io/krolchonok/amnezia-wg-easy:${{ env.RELEASE }}
+
+    - name: Build deploy zip
+      run: |
+        bundle_dir="dist/release/amnezia-wg-easy-${RELEASE}"
+        asset_name="amnezia-wg-easy-deploy-v${RELEASE}.zip"
+
+        rm -rf dist/release
+        mkdir -p "${bundle_dir}"
+
+        cp docker-compose.yml "${bundle_dir}/docker-compose.yml"
+        cp .env_example "${bundle_dir}/.env"
+        cp .env_example "${bundle_dir}/.env_example"
+        cp README.md "${bundle_dir}/README.md"
+        cp ENV_VARIABLES.md "${bundle_dir}/ENV_VARIABLES.md"
+
+        (
+          cd dist/release
+          zip -r "../${asset_name}" "amnezia-wg-easy-${RELEASE}"
+        )
+
+        echo DEPLOY_ASSET="dist/${asset_name}" >> $GITHUB_ENV
+
+    - name: Create GitHub release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ env.RELEASE }}
+        name: v${{ env.RELEASE }}
+        target_commitish: ${{ github.sha }}
+        generate_release_notes: true
+        files: ${{ env.DEPLOY_ASSET }}
