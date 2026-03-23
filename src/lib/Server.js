@@ -47,12 +47,21 @@ const {
   DICEBEAR_TYPE,
   USE_GRAVATAR,
   SSL_ENABLED,
+  HTTP_REDIRECT_PORT,
   SSL_CERT_PATH,
   SSL_KEY_PATH,
 } = require('../config');
 
 const requiresPassword = !!PASSWORD_HASH || !!PASSWORD;
 const requiresPrometheusPassword = !!PROMETHEUS_METRICS_PASSWORD || !!PROMETHEUS_METRICS_PASSWORD_HASH;
+
+const getHttpsRedirectUrl = (req) => {
+  const [hostname] = (req.headers.host || '').split(':');
+  const targetHost = hostname || 'localhost';
+  const targetPort = String(PORT) === '443' ? '' : `:${PORT}`;
+
+  return `https://${targetHost}${targetPort}${req.url}`;
+};
 
 /**
  * Checks if `password` matches the PASSWORD_HASH.
@@ -557,6 +566,17 @@ module.exports = class Server {
         debug(`Listening on https://${WEBUI_HOST}:${PORT}`);
         // eslint-disable-next-line no-console
         console.log(`[HTTPS] Listening on https://${WEBUI_HOST}:${PORT}`);
+
+        if (HTTP_REDIRECT_PORT !== Number(PORT)) {
+          createServer((req, res) => {
+            res.statusCode = 301;
+            res.setHeader('Location', getHttpsRedirectUrl(req));
+            res.end();
+          }).listen(HTTP_REDIRECT_PORT, WEBUI_HOST);
+          debug(`Redirecting http://${WEBUI_HOST}:${HTTP_REDIRECT_PORT} -> https://${WEBUI_HOST}:${PORT}`);
+          // eslint-disable-next-line no-console
+          console.log(`[HTTP] Redirecting http://${WEBUI_HOST}:${HTTP_REDIRECT_PORT} -> https://${WEBUI_HOST}:${PORT}`);
+        }
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error(`[SSL] Failed to start HTTPS with cert="${SSL_CERT_PATH}" key="${SSL_KEY_PATH}":`, err.message);

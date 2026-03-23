@@ -77,6 +77,7 @@ module.exports.DICEBEAR_TYPE = process.env.DICEBEAR_TYPE || false;
 module.exports.USE_GRAVATAR = process.env.USE_GRAVATAR || false;
 
 module.exports.SSL_ENABLED = process.env.SSL_ENABLED === 'true';
+module.exports.HTTP_REDIRECT_PORT = parseInt(process.env.HTTP_REDIRECT_PORT, 10) || 80;
 
 const defaultSslCertPath = '/etc/ssl/certs/ssl-cert.pem';
 const defaultSslKeyPath = '/etc/ssl/private/ssl-key.pem';

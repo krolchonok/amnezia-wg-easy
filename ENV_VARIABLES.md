@@ -57,6 +57,7 @@ Notes:
 | Variable | Default | Example | Description |
 |---|---|---|---|
 | `SSL_ENABLED` | `false` | `true` | Включить HTTPS. |
+| `HTTP_REDIRECT_PORT` | `80` | `8080` | HTTP-порт, который при `SSL_ENABLED=true` редиректит на HTTPS. |
 | `SSL_CERT_PATH` | `/etc/ssl/certs/ssl-cert.pem` | `/etc/letsencrypt/live/example.com/fullchain.pem` | Путь к сертификату. |
 | `SSL_KEY_PATH` | `/etc/ssl/private/ssl-key.pem` | `/etc/letsencrypt/live/example.com/privkey.pem` | Путь к приватному ключу. |
 
