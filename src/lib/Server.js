@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const basicAuth = require('basic-auth');
 const { createServer } = require('node:http');
 const { createServer: createHttpsServer } = require('node:https');
+const { createServer: createTcpServer } = require('node:net');
 const { stat, readFile } = require('node:fs/promises');
 const { readFileSync, existsSync } = require('node:fs');
 const { resolve, sep } = require('node:path');
@@ -47,7 +48,6 @@ const {
   DICEBEAR_TYPE,
   USE_GRAVATAR,
   SSL_ENABLED,
-  HTTP_REDIRECT_PORT,
   SSL_CERT_PATH,
   SSL_KEY_PATH,
 } = require('../config');
@@ -55,12 +55,58 @@ const {
 const requiresPassword = !!PASSWORD_HASH || !!PASSWORD;
 const requiresPrometheusPassword = !!PROMETHEUS_METRICS_PASSWORD || !!PROMETHEUS_METRICS_PASSWORD_HASH;
 
-const getHttpsRedirectUrl = (req) => {
-  const [hostname] = (req.headers.host || '').split(':');
+const getHttpsRedirectUrl = ({ host, url }) => {
+  const [hostname] = (host || '').split(':');
   const targetHost = hostname || 'localhost';
   const targetPort = String(PORT) === '443' ? '' : `:${PORT}`;
 
-  return `https://${targetHost}${targetPort}${req.url}`;
+  return `https://${targetHost}${targetPort}${url || '/'}`;
+};
+
+const getRedirectRequestMeta = (chunk) => {
+  const requestText = chunk.toString('utf8');
+  const [requestLine] = requestText.split('\r\n');
+  const [, url = '/'] = requestLine.split(' ');
+  const host = requestText.match(/^Host:\s*(.+)$/im)?.[1]?.trim() || '';
+
+  return { host, url };
+};
+
+const isTlsHandshake = (chunk) => {
+  return chunk.length > 0 && chunk[0] === 22;
+};
+
+const startHttpsWithSamePortRedirect = ({ app, sslOptions }) => {
+  const httpsServer = createHttpsServer(sslOptions, toNodeListener(app));
+  const tcpServer = createTcpServer({ pauseOnConnect: true }, (socket) => {
+    socket.once('data', (chunk) => {
+      if (isTlsHandshake(chunk)) {
+        socket.unshift(chunk);
+        httpsServer.emit('connection', socket);
+        socket.resume();
+        return;
+      }
+
+      const location = getHttpsRedirectUrl(getRedirectRequestMeta(chunk));
+      socket.end([
+        'HTTP/1.1 301 Moved Permanently',
+        `Location: ${location}`,
+        'Connection: close',
+        'Content-Length: 0',
+        '',
+        '',
+      ].join('\r\n'));
+    });
+
+    socket.on('error', () => {});
+  });
+
+  tcpServer.listen(PORT, WEBUI_HOST);
+  debug(`Listening on https+http redirect://${WEBUI_HOST}:${PORT}`);
+  // eslint-disable-next-line no-console
+  console.log(`[HTTPS] Listening on https://${WEBUI_HOST}:${PORT}`);
+  // eslint-disable-next-line no-console
+  console.log(`[HTTP] Redirecting http://${WEBUI_HOST}:${PORT} -> https://${WEBUI_HOST}:${PORT}`);
 };
 
 /**
@@ -562,21 +608,7 @@ module.exports = class Server {
           cert: readFileSync(SSL_CERT_PATH),
           key: readFileSync(SSL_KEY_PATH),
         };
-        createHttpsServer(sslOptions, toNodeListener(app)).listen(PORT, WEBUI_HOST);
-        debug(`Listening on https://${WEBUI_HOST}:${PORT}`);
-        // eslint-disable-next-line no-console
-        console.log(`[HTTPS] Listening on https://${WEBUI_HOST}:${PORT}`);
-
-        if (HTTP_REDIRECT_PORT !== Number(PORT)) {
-          createServer((req, res) => {
-            res.statusCode = 301;
-            res.setHeader('Location', getHttpsRedirectUrl(req));
-            res.end();
-          }).listen(HTTP_REDIRECT_PORT, WEBUI_HOST);
-          debug(`Redirecting http://${WEBUI_HOST}:${HTTP_REDIRECT_PORT} -> https://${WEBUI_HOST}:${PORT}`);
-          // eslint-disable-next-line no-console
-          console.log(`[HTTP] Redirecting http://${WEBUI_HOST}:${HTTP_REDIRECT_PORT} -> https://${WEBUI_HOST}:${PORT}`);
-        }
+        startHttpsWithSamePortRedirect({ app, sslOptions });
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error(`[SSL] Failed to start HTTPS with cert="${SSL_CERT_PATH}" key="${SSL_KEY_PATH}":`, err.message);
