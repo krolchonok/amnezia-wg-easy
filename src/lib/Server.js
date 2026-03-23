@@ -4,8 +4,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('node:crypto');
 const basicAuth = require('basic-auth');
 const { createServer } = require('node:http');
-const { createServer: createHttpsServer } = require('node:https');
-const { createServer: createTcpServer } = require('node:net');
+const httpolyglot = require('httpolyglot');
 const { stat, readFile } = require('node:fs/promises');
 const { readFileSync, existsSync } = require('node:fs');
 const { resolve, sep } = require('node:path');
@@ -61,52 +60,6 @@ const getHttpsRedirectUrl = ({ host, url }) => {
   const targetPort = String(PORT) === '443' ? '' : `:${PORT}`;
 
   return `https://${targetHost}${targetPort}${url || '/'}`;
-};
-
-const getRedirectRequestMeta = (chunk) => {
-  const requestText = chunk.toString('utf8');
-  const [requestLine] = requestText.split('\r\n');
-  const [, url = '/'] = requestLine.split(' ');
-  const host = requestText.match(/^Host:\s*(.+)$/im)?.[1]?.trim() || '';
-
-  return { host, url };
-};
-
-const isTlsHandshake = (chunk) => {
-  return chunk.length > 0 && chunk[0] === 22;
-};
-
-const startHttpsWithSamePortRedirect = ({ app, sslOptions }) => {
-  const httpsServer = createHttpsServer(sslOptions, toNodeListener(app));
-  const tcpServer = createTcpServer({ pauseOnConnect: true }, (socket) => {
-    socket.once('data', (chunk) => {
-      if (isTlsHandshake(chunk)) {
-        socket.unshift(chunk);
-        httpsServer.emit('connection', socket);
-        socket.resume();
-        return;
-      }
-
-      const location = getHttpsRedirectUrl(getRedirectRequestMeta(chunk));
-      socket.end([
-        'HTTP/1.1 301 Moved Permanently',
-        `Location: ${location}`,
-        'Connection: close',
-        'Content-Length: 0',
-        '',
-        '',
-      ].join('\r\n'));
-    });
-
-    socket.on('error', () => {});
-  });
-
-  tcpServer.listen(PORT, WEBUI_HOST);
-  debug(`Listening on https+http redirect://${WEBUI_HOST}:${PORT}`);
-  // eslint-disable-next-line no-console
-  console.log(`[HTTPS] Listening on https://${WEBUI_HOST}:${PORT}`);
-  // eslint-disable-next-line no-console
-  console.log(`[HTTP] Redirecting http://${WEBUI_HOST}:${PORT} -> https://${WEBUI_HOST}:${PORT}`);
 };
 
 /**
@@ -608,7 +561,25 @@ module.exports = class Server {
           cert: readFileSync(SSL_CERT_PATH),
           key: readFileSync(SSL_KEY_PATH),
         };
-        startHttpsWithSamePortRedirect({ app, sslOptions });
+        httpolyglot.createServer(sslOptions, (req, res) => {
+          if (!req.socket.encrypted) {
+            res.writeHead(301, {
+              Location: getHttpsRedirectUrl({
+                host: req.headers.host,
+                url: req.url,
+              }),
+            });
+            res.end();
+            return;
+          }
+
+          toNodeListener(app)(req, res);
+        }).listen(PORT, WEBUI_HOST);
+        debug(`Listening on https+http redirect://${WEBUI_HOST}:${PORT}`);
+        // eslint-disable-next-line no-console
+        console.log(`[HTTPS] Listening on https://${WEBUI_HOST}:${PORT}`);
+        // eslint-disable-next-line no-console
+        console.log(`[HTTP] Redirecting http://${WEBUI_HOST}:${PORT} -> https://${WEBUI_HOST}:${PORT}`);
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error(`[SSL] Failed to start HTTPS with cert="${SSL_CERT_PATH}" key="${SSL_KEY_PATH}":`, err.message);

@@ -21,6 +21,7 @@
     "debug": "^4.3.7",
     "express-session": "^1.19.0",
     "h3": "^1.15.6",
+    "httpolyglot": "^0.1.2",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
