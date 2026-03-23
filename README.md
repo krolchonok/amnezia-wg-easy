@@ -112,6 +112,15 @@ cp .env_example .env
 docker compose up -d
 ```
 
+Обновить существующую установку можно так:
+
+```bash
+./update_container.sh
+```
+
+Если у вас полный git-репозиторий, скрипт сделает `git pull`, затем `docker compose pull` и `docker compose up -d --remove-orphans`.
+Если установка сделана из deploy-архива без `.git`, скрипт скачает последний bundle из GitHub Release, обновит `docker-compose.yml`, `.env_example`, документацию, сохранит резервную копию текущего `.env` и перезапустит контейнер.
+
 ## Конфигурация `.env`
 
 - Шаблон: [.env_example](/root/amnezia-wg-easy/.env_example)

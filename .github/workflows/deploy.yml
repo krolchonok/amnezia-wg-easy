@@ -45,6 +45,7 @@ jobs:
       run: |
         bundle_dir="dist/release/amnezia-wg-easy-${RELEASE}"
         asset_name="amnezia-wg-easy-deploy-v${RELEASE}.zip"
+        latest_asset_name="amnezia-wg-easy-deploy.zip"
 
         rm -rf dist/release
         mkdir -p "${bundle_dir}"
@@ -54,13 +55,16 @@ jobs:
         cp .env_example "${bundle_dir}/.env_example"
         cp README.md "${bundle_dir}/README.md"
         cp ENV_VARIABLES.md "${bundle_dir}/ENV_VARIABLES.md"
+        cp update_container.sh "${bundle_dir}/update_container.sh"
 
         (
           cd dist/release
           zip -r "../${asset_name}" "amnezia-wg-easy-${RELEASE}"
         )
+        cp "dist/${asset_name}" "dist/${latest_asset_name}"
 
         echo DEPLOY_ASSET="dist/${asset_name}" >> $GITHUB_ENV
+        echo DEPLOY_LATEST_ASSET="dist/${latest_asset_name}" >> $GITHUB_ENV
 
     - name: Create GitHub release
       uses: softprops/action-gh-release@v2
@@ -69,4 +73,6 @@ jobs:
         name: v${{ env.RELEASE }}
         target_commitish: ${{ github.sha }}
         generate_release_notes: true
-        files: ${{ env.DEPLOY_ASSET }}
+        files: |
+          ${{ env.DEPLOY_ASSET }}
+          ${{ env.DEPLOY_LATEST_ASSET }}
