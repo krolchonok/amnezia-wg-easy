@@ -13,14 +13,17 @@ const PERIODS = {
   day: {
     resolution: 'raw',
     durationMs: DAY_MS,
+    maxSeriesPoints: 480,
   },
   week: {
     resolution: 'minute',
     durationMs: 7 * DAY_MS,
+    maxSeriesPoints: 336,
   },
   month: {
     resolution: 'hour',
     durationMs: 30 * DAY_MS,
+    maxSeriesPoints: 360,
   },
 };
 
@@ -153,6 +156,10 @@ module.exports = class TrafficHistory {
     const summary = periodConfig.resolution === 'raw'
       ? this.__summarizeRawRecords(records)
       : this.__summarizeAggregateRecords(records);
+    const series = this.__compactSeries(records, {
+      resolution: periodConfig.resolution,
+      maxPoints: periodConfig.maxSeriesPoints,
+    });
 
     return {
       period,
@@ -161,7 +168,7 @@ module.exports = class TrafficHistory {
       untilAt: new Date(untilMs).toISOString(),
       live,
       summary,
-      series: records,
+      series,
     };
   }
 
@@ -410,6 +417,69 @@ module.exports = class TrafficHistory {
       maxRxRate,
       maxTxRate,
       sampleCount,
+    };
+  }
+
+  __compactSeries(records, {
+    resolution,
+    maxPoints,
+  }) {
+    if (!Array.isArray(records) || records.length === 0) {
+      return [];
+    }
+
+    if (records.length <= maxPoints) {
+      return records.map((record) => this.__compactRecord(record, resolution));
+    }
+
+    const bucketSize = Math.ceil(records.length / maxPoints);
+    const compacted = [];
+
+    for (let index = 0; index < records.length; index += bucketSize) {
+      const bucket = records.slice(index, index + bucketSize);
+      compacted.push(this.__compactBucket(bucket, resolution));
+    }
+
+    return compacted;
+  }
+
+  __compactRecord(record, resolution) {
+    if (resolution === 'raw') {
+      return {
+        ts: record.ts,
+        rxRate: record.rxRate || 0,
+        txRate: record.txRate || 0,
+      };
+    }
+
+    return {
+      ts: record.ts,
+      rxRateAvg: record.rxRateAvg || 0,
+      txRateAvg: record.txRateAvg || 0,
+    };
+  }
+
+  __compactBucket(bucket, resolution) {
+    const last = bucket[bucket.length - 1];
+
+    if (resolution === 'raw') {
+      return {
+        ts: last.ts,
+        rxRate: bucket.reduce((sum, record) => sum + (record.rxRate || 0), 0) / bucket.length,
+        txRate: bucket.reduce((sum, record) => sum + (record.txRate || 0), 0) / bucket.length,
+      };
+    }
+
+    const totalSamples = bucket.reduce((sum, record) => sum + (record.sampleCount || 1), 0);
+
+    return {
+      ts: last.ts,
+      rxRateAvg: bucket.reduce((sum, record) => {
+        return sum + ((record.rxRateAvg || 0) * (record.sampleCount || 1));
+      }, 0) / totalSamples,
+      txRateAvg: bucket.reduce((sum, record) => {
+        return sum + ((record.txRateAvg || 0) * (record.sampleCount || 1));
+      }, 0) / totalSamples,
     };
   }
 
