@@ -559,7 +559,6 @@ module.exports = class TelegramBot {
       });
       return;
     }
-
     if (data === 'tg:admin:audit') {
       await this.__answerCallbackQuery(callbackQuery.id, 'Открываю аудит.');
       await this.__sendAdminAudit(chatId, { targetMessageId: sourceMessageId });
@@ -764,7 +763,6 @@ module.exports = class TelegramBot {
         });
         return;
       }
-
       if (callbackAction.action === 'admin_send_client_config_text') {
         const clientId = String(callbackAction.payload.clientId);
         await this.__answerCallbackQuery(callbackQuery.id, 'Отправляю текст.');
@@ -846,7 +844,6 @@ module.exports = class TelegramBot {
         });
         return;
       }
-
       if (callbackAction.action === 'admin_revoke_subscription') {
         const telegramUserId = String(callbackAction.payload.telegramUserId);
         const user = await this.store.getTelegramUser(telegramUserId);
@@ -2004,7 +2001,6 @@ module.exports = class TelegramBot {
       },
     }, targetMessageId);
   }
-
   async __sendAdminClientConfigActions(chatId, clientId, {
     page = 0,
     prefixMessage = null,
@@ -2220,7 +2216,6 @@ module.exports = class TelegramBot {
       },
     }, targetMessageId);
   }
-
   async __sendAdminSubscriptionRequests(chatId, {
     targetMessageId = null,
   } = {}) {
