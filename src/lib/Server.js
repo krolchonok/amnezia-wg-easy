@@ -827,8 +827,13 @@ module.exports = class Server {
     router2
       .delete('/api/session', defineEventHandler((event) => {
         const sessionId = event.node.req.session.id;
+        const secureAttr = SSL_ENABLED ? '; Secure' : '';
 
         event.node.req.session.destroy();
+        event.node.res.setHeader(
+          'Set-Cookie',
+          `amneziawg.sid=; Path=/; HttpOnly; SameSite=Lax${secureAttr}; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT`
+        );
 
         debug(`Deleted Session: ${sessionId}`);
         return { success: true };
@@ -1171,6 +1176,9 @@ module.exports = class Server {
           const shellFile = authenticated ? 'index.html' : 'login.html';
 
           setHeader(event, 'Content-Type', 'text/html');
+          setHeader(event, 'Cache-Control', 'no-store, no-cache, must-revalidate');
+          setHeader(event, 'Pragma', 'no-cache');
+          setHeader(event, 'Expires', '0');
           return readFile(safePathJoin(publicDir, shellFile));
         }
 
