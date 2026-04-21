@@ -1,0 +1,30 @@
+volumes:
+  etc_wireguard:
+
+services:
+  amnezia-wg-easy:
+    env_file:
+      - .env
+    image: ghcr.io/krolchonok/amnezia-wg-easy
+    container_name: amnezia-wg-easy-buy
+    volumes:
+      - etc_wireguard:/etc/wireguard
+      - ./uplinks:/etc/wireguard/uplinks
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # - ./ssl/cert.pem:/etc/ssl/certs/ssl-cert.pem:ro   # ⚠️ Uncomment for SSL
+      # - ./ssl/key.pem:/etc/ssl/private/ssl-key.pem:ro    # ⚠️ Uncomment for SSL
+    ports:
+      - "${WG_PORT:-51820}:${WG_PORT:-51820}/udp"
+      - "${PORT:-51821}:${PORT:-51821}/tcp"
+    extra_hosts:
+      - "api.telegram.org:149.154.167.220"
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+      # - NET_RAW # ⚠️ Uncomment if using Podman
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+    devices:
+    - /dev/net/tun:/dev/net/tun

@@ -1,0 +1,29 @@
+volumes:
+  etc_wireguard_local:
+
+services:
+  amnezia-wg-easy-local:
+    env_file:
+      - .env
+    build:
+      context: .
+    image: amnezia-wg-easy:local
+    container_name: amnezia-wg-easy-local
+    volumes:
+      - ./wg:/etc/wireguard
+      - ./uplinks:/etc/wireguard/uplinks
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    ports:
+      - "${WG_PORT:-51820}:${WG_PORT:-51820}/udp"
+      - "${PORT:-51821}:${PORT:-51821}/tcp"
+    extra_hosts:
+      - "api.telegram.org:149.154.167.220"
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+    devices:
+      - /dev/net/tun:/dev/net/tun
