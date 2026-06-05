@@ -54,6 +54,7 @@ const {
   H2,
   H3,
   H4,
+  WG_MANAGEMENT_ONLY,
 } = require('../config');
 
 const ensureUplinkConfigTableOff = (content) => {

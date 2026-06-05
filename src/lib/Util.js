@@ -63,6 +63,55 @@ module.exports = class Util {
       console.log(`$ ${cmd}`);
     }
 
+    if (process.env.WG_MANAGEMENT_ONLY === 'true') {
+      const trimmedCmd = cmd.trim();
+      if (trimmedCmd === 'wg genkey') {
+        const crypto = require('crypto');
+        return crypto.randomBytes(32).toString('base64');
+      }
+      if (trimmedCmd === 'wg genpsk') {
+        const crypto = require('crypto');
+        return crypto.randomBytes(32).toString('base64');
+      }
+      if (trimmedCmd.startsWith('echo ') && trimmedCmd.includes('wg pubkey')) {
+        const match = trimmedCmd.match(/echo\s+([^\s|]+)/);
+        if (match) {
+          const privateKeyBase64 = match[1];
+          try {
+            const crypto = require('crypto');
+            const rawPrivate = Buffer.from(privateKeyBase64, 'base64');
+            const pkcs8 = Buffer.concat([
+              Buffer.from([
+                0x30, 0x2e,
+                0x02, 0x01, 0x00,
+                0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x6e,
+                0x04, 0x22,
+                0x04, 0x20
+              ]),
+              rawPrivate
+            ]);
+            const key = crypto.createPrivateKey({
+              key: pkcs8,
+              format: 'der',
+              type: 'pkcs8'
+            });
+            const pubKeyObject = crypto.createPublicKey(key);
+            const spki = pubKeyObject.export({ format: 'der', type: 'spki' });
+            const rawPublic = spki.slice(spki.length - 32);
+            return rawPublic.toString('base64');
+          } catch (e) {
+            console.error('Error deriving public key:', e);
+            const crypto = require('crypto');
+            return crypto.randomBytes(32).toString('base64');
+          }
+        }
+      }
+      if (trimmedCmd.startsWith('wg show') && trimmedCmd.includes('dump')) {
+        return '';
+      }
+      return '';
+    }
+
     if (process.platform !== 'linux') {
       return '';
     }

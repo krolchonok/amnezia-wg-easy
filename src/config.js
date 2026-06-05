@@ -121,3 +121,5 @@ module.exports.H1 = process.env.H1 || getRandomHeader();
 module.exports.H2 = process.env.H2 || getRandomHeader();
 module.exports.H3 = process.env.H3 || getRandomHeader();
 module.exports.H4 = process.env.H4 || getRandomHeader();
+module.exports.WG_MANAGEMENT_ONLY = process.env.WG_MANAGEMENT_ONLY === 'true';
+

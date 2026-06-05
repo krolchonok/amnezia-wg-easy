@@ -91,6 +91,7 @@ new Vue({
   i18n,
   data: {
     authenticated: null,
+    mockMode: false,
     setupState: {
       needsSetup: false,
       configured: false,
@@ -129,7 +130,7 @@ new Vue({
     remember: false,
     rememberMeEnabled: false,
     currentPage: 'clients',
-
+    clientSearch: '',
     clients: null,
     clientIsolation: {
       enabled: false,
@@ -140,6 +141,12 @@ new Vue({
     aclDraggingRuleId: null,
     aclDragOverRuleId: null,
     uplinks: [],
+    uplinksDraft: [],
+    uplinkIsDirty: false,
+    uplinkProtectedCidrsIsDirty: false,
+    dnsRoutingIsDirty: false,
+    routingCategoriesIsDirty: false,
+    clientIsolationIsDirty: false,
     uplinkConfigOptions: [],
     uplinkProtectedCidrsText: '',
     uplinkProtectedCidrsSaving: false,
@@ -182,16 +189,16 @@ new Vue({
       hasPassword: false,
       newPassword: '',
       newPasswordConfirm: '',
-        telegram: {
-          enabled: false,
-          token: '',
-          adminIds: '',
-          pollTimeoutSeconds: 25,
-          subscriptionPhoneNumber: '',
-          subscriptionRecipientName: '',
-          subscriptionBankName: '',
-          subscriptionPaymentNote: '',
-        },
+      telegram: {
+        enabled: false,
+        token: '',
+        adminIds: '',
+        pollTimeoutSeconds: 25,
+        subscriptionPhoneNumber: '',
+        subscriptionRecipientName: '',
+        subscriptionBankName: '',
+        subscriptionPaymentNote: '',
+      },
     },
     settingsSaving: false,
     uplinkSaving: false,
@@ -200,8 +207,6 @@ new Vue({
     uplinkConfigImportFilename: '',
     uplinkConfigImportContent: '',
     uplinkConfigImportSaving: false,
-    uplinkAutosaveTimer: null,
-    uplinkAutosaveQueued: false,
     uplinkWatchSuspended: false,
     routingCategoriesSaving: false,
     dnsRoutingSaving: false,
@@ -229,6 +234,7 @@ new Vue({
       tone: 'info',
     },
     notificationTimer: null,
+    refreshDebounceTimer: null,
     eventSource: null,
     liveRefreshTimer: null,
     trafficClient: null,
@@ -347,6 +353,13 @@ new Vue({
 
   },
   methods: {
+    parseLines(text, { toLowerCase = false } = {}) {
+      if (typeof text !== 'string') return [];
+      return text
+        .split(/[\s,\n;]+/)
+        .map((value) => (toLowerCase ? value.trim().toLowerCase() : value.trim()))
+        .filter(Boolean);
+    },
     dateTime: (value) => {
       return new Intl.DateTimeFormat(undefined, {
         year: 'numeric',
@@ -376,12 +389,6 @@ new Vue({
           this.clientsPersist[client.id].transferTxHistory = Array(50).fill(0);
           this.clientsPersist[client.id].transferTxPrevious = client.transferTx;
         }
-
-        // Debug
-        // client.transferRx = this.clientsPersist[client.id].transferRxPrevious + Math.random() * 1000;
-        // client.transferTx = this.clientsPersist[client.id].transferTxPrevious + Math.random() * 1000;
-        // client.latestHandshakeAt = new Date();
-        // this.requiresPassword = true;
 
         this.clientsPersist[client.id].transferRxCurrent = client.transferRx - this.clientsPersist[client.id].transferRxPrevious;
         this.clientsPersist[client.id].transferRxPrevious = client.transferRx;
@@ -429,19 +436,30 @@ new Vue({
     async refreshClientIsolation() {
       if (!this.authenticated) return;
       const settings = await this.api.getClientIsolation();
-      this.clientIsolation = {
-        enabled: settings.enabled === true,
-        availableGroups: Array.isArray(settings.availableGroups) ? settings.availableGroups : [],
-        rules: Array.isArray(settings.rules) ? settings.rules : [],
-      };
+      if (!this.clientIsolationIsDirty && !this.clientIsolationSaving) {
+        this.uplinkWatchSuspended = true;
+        this.clientIsolation = {
+          enabled: settings.enabled === true,
+          availableGroups: Array.isArray(settings.availableGroups) ? settings.availableGroups : [],
+          rules: Array.isArray(settings.rules) ? settings.rules : [],
+        };
+        this.$nextTick(() => {
+          this.uplinkWatchSuspended = false;
+        });
+      }
     },
     async refreshUplinkSettings() {
       if (!this.authenticated) return;
       const uplinks = await this.api.getUplinks();
       this.uplinkWatchSuspended = true;
-      this.uplinks = Array.isArray(uplinks)
+      const normalized = Array.isArray(uplinks)
         ? uplinks.map((uplink, index) => this.normalizeUplinkSettings(uplink, index))
         : [];
+      this.uplinks = JSON.parse(JSON.stringify(normalized));
+      if (!this.uplinkIsDirty && !this.uplinkSaving) {
+        this.uplinksDraft = JSON.parse(JSON.stringify(normalized));
+        this.uplinkSaveState = 'idle';
+      }
       this.$nextTick(() => {
         this.uplinkWatchSuspended = false;
       });
@@ -449,9 +467,15 @@ new Vue({
     async refreshUplinkProtectedCidrs() {
       if (!this.authenticated) return;
       const settings = await this.api.getUplinkProtectedCidrs();
-      this.uplinkProtectedCidrsText = Array.isArray(settings.cidrs)
-        ? settings.cidrs.join('\n')
-        : '';
+      if (!this.uplinkProtectedCidrsIsDirty && !this.uplinkProtectedCidrsSaving) {
+        this.uplinkWatchSuspended = true;
+        this.uplinkProtectedCidrsText = Array.isArray(settings.cidrs)
+          ? settings.cidrs.join('\n')
+          : '';
+        this.$nextTick(() => {
+          this.uplinkWatchSuspended = false;
+        });
+      }
     },
     async refreshUplinkConfigOptions() {
       if (!this.authenticated) return;
@@ -461,11 +485,17 @@ new Vue({
     async refreshDnsRouting() {
       if (!this.authenticated) return;
       const settings = await this.api.getDnsRouting();
-      this.dnsRouting = {
-        enabled: settings.enabled === true,
-        upstreamsText: Array.isArray(settings.upstreams) ? settings.upstreams.join('\n') : '',
-        listenAddress: typeof settings.listenAddress === 'string' ? settings.listenAddress : '',
-      };
+      if (!this.dnsRoutingIsDirty && !this.dnsRoutingSaving) {
+        this.uplinkWatchSuspended = true;
+        this.dnsRouting = {
+          enabled: settings.enabled === true,
+          upstreamsText: Array.isArray(settings.upstreams) ? settings.upstreams.join('\n') : '',
+          listenAddress: typeof settings.listenAddress === 'string' ? settings.listenAddress : '',
+        };
+        this.$nextTick(() => {
+          this.uplinkWatchSuspended = false;
+        });
+      }
     },
     async refreshDnsLogs(limit = 200) {
       if (!this.authenticated) return;
@@ -482,53 +512,58 @@ new Vue({
         this.dnsLogsLoading = false;
       }
     },
+    async refreshCurrentPageData({ force = false } = {}) {
+      if (!this.authenticated) return;
+
+      const refreshes = [this.refresh()];
+
+      if (force) {
+        refreshes.push(
+          this.refreshClientIsolation(),
+          this.refreshUplinkConfigOptions(),
+          this.refreshUplinkSettings(),
+          this.refreshUplinkProtectedCidrs(),
+          this.refreshRoutingCategories(),
+          this.refreshDnsRouting(),
+          this.refreshSettings(),
+        );
+        if (this.currentPage === 'dns-logs') {
+          refreshes.push(this.refreshDnsLogs());
+        }
+      } else {
+        switch (this.currentPage) {
+          case 'acl':
+            refreshes.push(this.refreshClientIsolation());
+            break;
+          case 'uplink':
+            refreshes.push(this.refreshUplinkConfigOptions());
+            refreshes.push(this.refreshUplinkSettings());
+            refreshes.push(this.refreshUplinkProtectedCidrs());
+            refreshes.push(this.refreshRoutingCategories());
+            refreshes.push(this.refreshDnsRouting());
+            break;
+          case 'dns-logs':
+            refreshes.push(this.refreshDnsLogs());
+            break;
+          case 'settings':
+            refreshes.push(this.refreshSettings());
+            break;
+        }
+      }
+
+      await Promise.all(refreshes).catch(console.error);
+    },
     async refreshSettings() {
       if (!this.authenticated) return;
       const settings = await this.api.getSettings();
       this.settings = {
         wgHost: typeof settings.wgHost === 'string' ? settings.wgHost : '',
         defaultDns: typeof settings.defaultDns === 'string' ? settings.defaultDns : '',
-        runtime: {
-          wgPort: typeof settings.runtime?.wgPort === 'string' ? settings.runtime.wgPort : '51820',
-          wgConfigPort: typeof settings.runtime?.wgConfigPort === 'string' ? settings.runtime.wgConfigPort : '51820',
-          wgMtu: typeof settings.runtime?.wgMtu === 'string' ? settings.runtime.wgMtu : '',
-          wgDefaultAddress: typeof settings.runtime?.wgDefaultAddress === 'string' ? settings.runtime.wgDefaultAddress : '10.8.0.x',
-          wgAllowedIps: typeof settings.runtime?.wgAllowedIps === 'string' ? settings.runtime.wgAllowedIps : '0.0.0.0/0, ::/0',
-          wgPersistentKeepalive: typeof settings.runtime?.wgPersistentKeepalive === 'string' ? settings.runtime.wgPersistentKeepalive : '0',
-          uiTrafficStats: settings.runtime?.uiTrafficStats === true,
-          uiChartType: Number.parseInt(settings.runtime?.uiChartType, 10) || 0,
-          enableOneTimeLinks: settings.runtime?.enableOneTimeLinks === true,
-          enableSortClients: settings.runtime?.enableSortClients === true,
-          enableExpireTime: settings.runtime?.enableExpireTime === true,
-          avatarDicebearType: typeof settings.runtime?.avatarDicebearType === 'string' ? settings.runtime.avatarDicebearType : '',
-          avatarUseGravatar: settings.runtime?.avatarUseGravatar === true,
-          trafficHistoryEnabled: settings.runtime?.trafficHistoryEnabled === true,
-          trafficSampleIntervalSeconds: Number.parseInt(settings.runtime?.trafficSampleIntervalSeconds, 10) || 1,
-          trafficRawRetentionHours: Number.parseInt(settings.runtime?.trafficRawRetentionHours, 10) || 24,
-          trafficMinuteRetentionDays: Number.parseInt(settings.runtime?.trafficMinuteRetentionDays, 10) || 90,
-          trafficHourRetentionDays: Number.parseInt(settings.runtime?.trafficHourRetentionDays, 10) || 365,
-        },
+        runtime: this.normalizeRuntimeSettings(settings.runtime),
         hasPassword: settings.hasPassword === true,
         newPassword: '',
         newPasswordConfirm: '',
-        telegram: {
-          enabled: settings.telegram && settings.telegram.enabled === true,
-          token: typeof settings.telegram?.token === 'string' ? settings.telegram.token : '',
-          adminIds: typeof settings.telegram?.adminIds === 'string' ? settings.telegram.adminIds : '',
-          pollTimeoutSeconds: Number.parseInt(settings.telegram?.pollTimeoutSeconds, 10) || 25,
-          subscriptionPhoneNumber: typeof settings.telegram?.subscriptionPhoneNumber === 'string'
-            ? settings.telegram.subscriptionPhoneNumber
-            : '',
-          subscriptionRecipientName: typeof settings.telegram?.subscriptionRecipientName === 'string'
-            ? settings.telegram.subscriptionRecipientName
-            : '',
-          subscriptionBankName: typeof settings.telegram?.subscriptionBankName === 'string'
-            ? settings.telegram.subscriptionBankName
-            : '',
-          subscriptionPaymentNote: typeof settings.telegram?.subscriptionPaymentNote === 'string'
-            ? settings.telegram.subscriptionPaymentNote
-            : '',
-        },
+        telegram: this.normalizeTelegramSettings(settings.telegram),
       };
     },
     async loadAuthenticatedUiFlags() {
@@ -664,10 +699,44 @@ new Vue({
         domainsText: Array.isArray(category?.domains) ? category.domains.join('\n') : '',
       };
     },
+    normalizeRuntimeSettings(runtime) {
+      return {
+        wgPort: typeof runtime?.wgPort === 'string' ? runtime.wgPort : '51820',
+        wgConfigPort: typeof runtime?.wgConfigPort === 'string' ? runtime.wgConfigPort : '51820',
+        wgMtu: typeof runtime?.wgMtu === 'string' ? runtime.wgMtu : '',
+        wgDefaultAddress: typeof runtime?.wgDefaultAddress === 'string' ? runtime.wgDefaultAddress : '10.8.0.x',
+        wgAllowedIps: typeof runtime?.wgAllowedIps === 'string' ? runtime.wgAllowedIps : '0.0.0.0/0, ::/0',
+        wgPersistentKeepalive: typeof runtime?.wgPersistentKeepalive === 'string' ? runtime.wgPersistentKeepalive : '0',
+        uiTrafficStats: runtime?.uiTrafficStats === true,
+        uiChartType: Number.parseInt(runtime?.uiChartType, 10) || 0,
+        enableOneTimeLinks: runtime?.enableOneTimeLinks === true,
+        enableSortClients: runtime?.enableSortClients === true,
+        enableExpireTime: runtime?.enableExpireTime === true,
+        avatarDicebearType: typeof runtime?.avatarDicebearType === 'string' ? runtime.avatarDicebearType : '',
+        avatarUseGravatar: runtime?.avatarUseGravatar === true,
+        trafficHistoryEnabled: runtime?.trafficHistoryEnabled === true,
+        trafficSampleIntervalSeconds: Number.parseInt(runtime?.trafficSampleIntervalSeconds, 10) || 1,
+        trafficRawRetentionHours: Number.parseInt(runtime?.trafficRawRetentionHours, 10) || 24,
+        trafficMinuteRetentionDays: Number.parseInt(runtime?.trafficMinuteRetentionDays, 10) || 90,
+        trafficHourRetentionDays: Number.parseInt(runtime?.trafficHourRetentionDays, 10) || 365,
+      };
+    },
+    normalizeTelegramSettings(telegram) {
+      return {
+        enabled: telegram && telegram.enabled === true,
+        token: typeof telegram?.token === 'string' ? telegram.token : '',
+        adminIds: typeof telegram?.adminIds === 'string' ? telegram.adminIds : '',
+        pollTimeoutSeconds: Number.parseInt(telegram?.pollTimeoutSeconds, 10) || 25,
+        subscriptionPhoneNumber: typeof telegram?.subscriptionPhoneNumber === 'string' ? telegram.subscriptionPhoneNumber : '',
+        subscriptionRecipientName: typeof telegram?.subscriptionRecipientName === 'string' ? telegram.subscriptionRecipientName : '',
+        subscriptionBankName: typeof telegram?.subscriptionBankName === 'string' ? telegram.subscriptionBankName : '',
+        subscriptionPaymentNote: typeof telegram?.subscriptionPaymentNote === 'string' ? telegram.subscriptionPaymentNote : '',
+      };
+    },
     syncUplinkInterfaceFromConfig(uplink) {
       if (!uplink || !uplink.configPath) return;
       const selected = this.uplinkConfigOptions.find((option) => option.path === uplink.configPath);
-      if (selected) {
+      if (selected && selected.interfaceName) {
         const previousInterface = typeof uplink.interfaceName === 'string' ? uplink.interfaceName.trim() : '';
         const previousName = typeof uplink.name === 'string' ? uplink.name.trim() : '';
         uplink.interfaceName = selected.interfaceName;
@@ -691,10 +760,17 @@ new Vue({
       }
     },
     async refreshRoutingCategories() {
+      if (!this.authenticated) return;
       const categories = await this.api.getRoutingCategories();
-      this.routingCategories = Array.isArray(categories)
-        ? categories.map((category, index) => this.normalizeRoutingCategory(category, index))
-        : [];
+      if (!this.routingCategoriesIsDirty && !this.routingCategoriesSaving) {
+        this.uplinkWatchSuspended = true;
+        this.routingCategories = Array.isArray(categories)
+          ? categories.map((category, index) => this.normalizeRoutingCategory(category, index))
+          : [];
+        this.$nextTick(() => {
+          this.uplinkWatchSuspended = false;
+        });
+      }
     },
     login(e) {
       e.preventDefault();
@@ -711,14 +787,7 @@ new Vue({
           const session = await this.api.getSession();
           this.authenticated = session.authenticated;
           this.requiresPassword = session.requiresPassword;
-          await this.refresh();
-          await this.refreshClientIsolation();
-          await this.refreshUplinkConfigOptions();
-          await this.refreshUplinkSettings();
-          await this.refreshUplinkProtectedCidrs();
-          await this.refreshRoutingCategories();
-          await this.refreshDnsRouting();
-          await this.refreshSettings();
+          await this.refreshCurrentPageData({ force: true });
           await this.loadAuthenticatedUiFlags();
           await this.loadAuthenticatedRuntimeInfo();
           this.connectRealtime();
@@ -895,6 +964,20 @@ new Vue({
         })
         .catch((err) => this.notifyError(err));
     },
+    getClientQrCodeUrl(client) {
+      if (this.api && typeof this.api.getClientQrCodeUrl === 'function') {
+        return this.api.getClientQrCodeUrl({ clientId: client.id });
+      }
+
+      return `./api/wireguard/client/${client.id}/qrcode.svg`;
+    },
+    getClientConfigurationDownloadUrl(client) {
+      if (this.api && typeof this.api.getClientConfigurationDownloadUrl === 'function') {
+        return this.api.getClientConfigurationDownloadUrl({ clientId: client.id });
+      }
+
+      return `./api/wireguard/client/${client.id}/configuration`;
+    },
     closeClientConfiguration() {
       this.configText = null;
       this.configClientName = null;
@@ -1044,6 +1127,26 @@ new Vue({
       try {
         await this.copyTextToClipboard(this.configText);
         this.notify(this.$t('configCopied'), 'success');
+      } catch (err) {
+        this.notifyError(err);
+      }
+    },
+    async copyClientAddress(client) {
+      if (!client || !client.address) return;
+
+      try {
+        await this.copyTextToClipboard(client.address);
+        this.notify(this.$t('copied'), 'success');
+      } catch (err) {
+        this.notifyError(err);
+      }
+    },
+    async copyClientPublicKey(client) {
+      if (!client || !client.publicKey) return;
+
+      try {
+        await this.copyTextToClipboard(client.publicKey);
+        this.notify(this.$t('copied'), 'success');
       } catch (err) {
         this.notifyError(err);
       }
@@ -1272,13 +1375,10 @@ new Vue({
     },
     appendUplinkSourceRule(uplinkId, address) {
       if (!address) return;
-      const uplink = this.uplinks.find((candidate) => candidate.id === uplinkId);
+      const uplink = this.uplinksDraft.find((candidate) => candidate.id === uplinkId);
       if (!uplink) return;
       const rule = `${address}/32`;
-      const rules = uplink.sourceRulesText
-        .split(/[\n,;]+/)
-        .map((value) => value.trim())
-        .filter(Boolean);
+      const rules = this.parseLines(uplink.sourceRulesText);
 
       if (!rules.includes(rule)) {
         rules.push(rule);
@@ -1287,70 +1387,64 @@ new Vue({
       uplink.sourceRulesText = rules.join('\n');
     },
     addUplink() {
-      this.uplinks.push(this.createEmptyUplink(this.uplinks.length));
+      this.uplinksDraft.push(this.createEmptyUplink(this.uplinksDraft.length));
     },
     addRoutingCategory() {
       this.routingCategories.push(this.createEmptyRoutingCategory(this.routingCategories.length));
     },
     moveUplink(uplinkId, direction) {
-      const index = this.uplinks.findIndex((uplink) => uplink.id === uplinkId);
+      const index = this.uplinksDraft.findIndex((uplink) => uplink.id === uplinkId);
       if (index === -1) return;
 
       const targetIndex = direction === 'up'
         ? index - 1
         : index + 1;
 
-      if (targetIndex < 0 || targetIndex >= this.uplinks.length) {
+      if (targetIndex < 0 || targetIndex >= this.uplinksDraft.length) {
         return;
       }
 
-      const reordered = [...this.uplinks];
+      const reordered = [...this.uplinksDraft];
       const [uplink] = reordered.splice(index, 1);
       reordered.splice(targetIndex, 0, uplink);
-      this.uplinks = reordered;
+      this.uplinksDraft = reordered;
     },
     removeUplink(uplinkId) {
-      this.uplinks = this.uplinks.filter((uplink) => uplink.id !== uplinkId);
+      this.uplinksDraft = this.uplinksDraft.filter((uplink) => uplink.id !== uplinkId);
     },
     removeRoutingCategory(categoryId) {
       this.routingCategories = this.routingCategories.filter((category) => category.id !== categoryId);
     },
     serializeUplinkSettings() {
-      return this.uplinks.map((uplink) => ({
+      return this.uplinksDraft.map((uplink) => ({
         id: uplink.id,
         name: uplink.name,
         enabled: uplink.enabled,
         configPath: uplink.configPath,
         interfaceName: uplink.interfaceName,
         table: uplink.table,
-        sourceRules: uplink.sourceRulesText
-          .split(/[\n,;]+/)
-          .map((value) => value.trim())
-          .filter(Boolean),
-        destinationDomains: uplink.destinationDomainsText
-          .split(/[\n,;]+/)
-          .map((value) => value.trim().toLowerCase())
-          .filter(Boolean),
+        sourceRules: this.parseLines(uplink.sourceRulesText),
+        destinationDomains: this.parseLines(uplink.destinationDomainsText, { toLowerCase: true }),
       }));
+    },
+    discardUplinkChanges() {
+      this.uplinkWatchSuspended = true;
+      this.uplinksDraft = JSON.parse(JSON.stringify(this.uplinks));
+      this.uplinkIsDirty = false;
+      this.uplinkSaveState = 'idle';
+      this.$nextTick(() => {
+        this.uplinkWatchSuspended = false;
+      });
     },
     scheduleUplinkAutosave() {
       if (!this.authenticated || this.uplinkWatchSuspended) return;
-      if (this.uplinkAutosaveTimer) {
-        clearTimeout(this.uplinkAutosaveTimer);
-      }
+
+      this.uplinkIsDirty = true;
       this.uplinkSaveState = 'pending';
-      this.uplinkAutosaveTimer = setTimeout(() => {
-        this.uplinkAutosaveTimer = null;
-        this.saveUplinkSettings({ silent: true });
-      }, 900);
     },
     saveUplinkSettings({
       silent = false,
     } = {}) {
-      if (this.uplinkAutosaveTimer) {
-        clearTimeout(this.uplinkAutosaveTimer);
-        this.uplinkAutosaveTimer = null;
-      }
       if (this.uplinkSaving) return;
 
       this.uplinkSaving = true;
@@ -1360,9 +1454,12 @@ new Vue({
       })
         .then((settings) => {
           this.uplinkWatchSuspended = true;
-          this.uplinks = Array.isArray(settings)
+          const normalized = Array.isArray(settings)
             ? settings.map((uplink, index) => this.normalizeUplinkSettings(uplink, index))
             : [];
+          this.uplinks = JSON.parse(JSON.stringify(normalized));
+          this.uplinksDraft = JSON.parse(JSON.stringify(normalized));
+          this.uplinkIsDirty = false;
           this.uplinkSaveState = 'saved';
           this.$nextTick(() => {
             this.uplinkWatchSuspended = false;
@@ -1384,15 +1481,17 @@ new Vue({
 
       this.uplinkProtectedCidrsSaving = true;
       this.api.updateUplinkProtectedCidrs({
-        cidrs: this.uplinkProtectedCidrsText
-          .split(/[\n,;]+/)
-          .map((value) => value.trim())
-          .filter(Boolean),
+        cidrs: this.parseLines(this.uplinkProtectedCidrsText),
       })
         .then((settings) => {
+          this.uplinkWatchSuspended = true;
           this.uplinkProtectedCidrsText = Array.isArray(settings.cidrs)
             ? settings.cidrs.join('\n')
             : '';
+          this.uplinkProtectedCidrsIsDirty = false;
+          this.$nextTick(() => {
+            this.uplinkWatchSuspended = false;
+          });
           this.notify(this.$t('settingsSaved'), 'success');
         })
         .catch((err) => {
@@ -1412,16 +1511,18 @@ new Vue({
           name: category.name,
           enabled: category.enabled === true,
           uplinkId: category.uplinkId || null,
-          domains: category.domainsText
-            .split(/[\n,;]+/)
-            .map((value) => value.trim().toLowerCase())
-            .filter(Boolean),
+          domains: this.parseLines(category.domainsText, { toLowerCase: true }),
         })),
       })
         .then((categories) => {
+          this.uplinkWatchSuspended = true;
           this.routingCategories = Array.isArray(categories)
             ? categories.map((category, index) => this.normalizeRoutingCategory(category, index))
             : [];
+          this.routingCategoriesIsDirty = false;
+          this.$nextTick(() => {
+            this.uplinkWatchSuspended = false;
+          });
           this.notify(this.$t('settingsSaved'), 'success');
         })
         .catch((err) => this.notifyError(err))
@@ -1435,17 +1536,19 @@ new Vue({
       this.dnsRoutingSaving = true;
       this.api.updateDnsRouting({
         enabled: this.dnsRouting.enabled,
-        upstreams: this.dnsRouting.upstreamsText
-          .split(/[\s,\n;]+/)
-          .map((value) => value.trim())
-          .filter(Boolean),
+        upstreams: this.parseLines(this.dnsRouting.upstreamsText),
       })
         .then((settings) => {
+          this.uplinkWatchSuspended = true;
           this.dnsRouting = {
             enabled: settings.enabled === true,
             upstreamsText: Array.isArray(settings.upstreams) ? settings.upstreams.join('\n') : '',
             listenAddress: typeof settings.listenAddress === 'string' ? settings.listenAddress : '',
           };
+          this.dnsRoutingIsDirty = false;
+          this.$nextTick(() => {
+            this.uplinkWatchSuspended = false;
+          });
           this.notify(this.$t('settingsSaved'), 'success');
         })
         .catch((err) => this.notifyError(err))
@@ -1457,7 +1560,7 @@ new Vue({
       if (this.uplinkTestingId) return;
 
       if (uplinkId) {
-        const uplink = this.uplinks.find((candidate) => candidate.id === uplinkId);
+        const uplink = this.uplinksDraft.find((candidate) => candidate.id === uplinkId);
         if (!uplink) {
           this.notifyError(new Error('Selected uplink is not available in the current UI state.'));
           return;
@@ -1541,17 +1644,21 @@ new Vue({
         rules: this.clientIsolation.rules,
       })
         .then((settings) => {
+          this.uplinkWatchSuspended = true;
           this.clientIsolation = {
             enabled: settings.enabled === true,
             availableGroups: Array.isArray(settings.availableGroups) ? settings.availableGroups : [],
             rules: Array.isArray(settings.rules) ? settings.rules : [],
           };
+          this.clientIsolationIsDirty = false;
+          this.$nextTick(() => {
+            this.uplinkWatchSuspended = false;
+          });
           this.notify(this.$t('settingsSaved'), 'success');
         })
         .catch((err) => this.notifyError(err))
         .finally(() => {
           this.clientIsolationSaving = false;
-          this.refreshClientIsolation().catch(console.error);
         });
     },
     restoreConfig(e) {
@@ -1667,17 +1774,13 @@ new Vue({
           return;
         }
 
-        Promise.all([
-          this.refresh(),
-          this.refreshClientIsolation(),
-          this.refreshUplinkConfigOptions(),
-          this.refreshUplinkSettings(),
-          this.refreshUplinkProtectedCidrs(),
-          this.refreshRoutingCategories(),
-          this.refreshDnsRouting(),
-          this.currentPage === 'dns-logs' ? this.refreshDnsLogs() : Promise.resolve(),
-          this.currentPage === 'settings' ? this.refreshSettings() : Promise.resolve(),
-        ]).catch(console.error);
+        if (this.refreshDebounceTimer) {
+          clearTimeout(this.refreshDebounceTimer);
+        }
+        this.refreshDebounceTimer = setTimeout(() => {
+          this.refreshCurrentPageData();
+          this.refreshDebounceTimer = null;
+        }, 300);
       };
 
       source.onerror = () => {
@@ -1713,10 +1816,42 @@ new Vue({
     },
   },
   watch: {
-    uplinks: {
+    uplinksDraft: {
       deep: true,
+      sync: true,
       handler() {
         this.scheduleUplinkAutosave();
+      },
+    },
+    dnsRouting: {
+      deep: true,
+      sync: true,
+      handler() {
+        if (!this.authenticated || this.uplinkWatchSuspended) return;
+        this.dnsRoutingIsDirty = true;
+      },
+    },
+    uplinkProtectedCidrsText: {
+      sync: true,
+      handler() {
+        if (!this.authenticated || this.uplinkWatchSuspended) return;
+        this.uplinkProtectedCidrsIsDirty = true;
+      },
+    },
+    routingCategories: {
+      deep: true,
+      sync: true,
+      handler() {
+        if (!this.authenticated || this.uplinkWatchSuspended) return;
+        this.routingCategoriesIsDirty = true;
+      },
+    },
+    clientIsolation: {
+      deep: true,
+      sync: true,
+      handler() {
+        if (!this.authenticated || this.uplinkWatchSuspended) return;
+        this.clientIsolationIsDirty = true;
       },
     },
   },
@@ -1746,7 +1881,9 @@ new Vue({
     this.prefersDarkScheme.addListener(this.handlePrefersChange);
     this.setTheme(this.uiTheme);
 
-    this.api = new API();
+    const ApiClass = window.WgEasyApiClass || API;
+    this.api = new ApiClass();
+    this.mockMode = this.api.mockMode === true;
     this.api.getSetupState()
       .then(async (setupState) => {
         this.setupState = {
@@ -1757,26 +1894,7 @@ new Vue({
           defaultDns: '',
         };
         this.setupDefaultDns = setupState.defaults?.defaultDns || '1.1.1.1';
-        this.setupRuntime = {
-          wgPort: typeof setupState.defaults?.wgPort === 'string' ? setupState.defaults.wgPort : '51820',
-          wgConfigPort: typeof setupState.defaults?.wgConfigPort === 'string' ? setupState.defaults.wgConfigPort : '51820',
-          wgMtu: typeof setupState.defaults?.wgMtu === 'string' ? setupState.defaults.wgMtu : '',
-          wgDefaultAddress: typeof setupState.defaults?.wgDefaultAddress === 'string' ? setupState.defaults.wgDefaultAddress : '10.8.0.x',
-          wgAllowedIps: typeof setupState.defaults?.wgAllowedIps === 'string' ? setupState.defaults.wgAllowedIps : '0.0.0.0/0, ::/0',
-          wgPersistentKeepalive: typeof setupState.defaults?.wgPersistentKeepalive === 'string' ? setupState.defaults.wgPersistentKeepalive : '0',
-          uiTrafficStats: setupState.defaults?.uiTrafficStats === true,
-          uiChartType: Number.parseInt(setupState.defaults?.uiChartType, 10) || 0,
-          enableOneTimeLinks: setupState.defaults?.enableOneTimeLinks === true,
-          enableSortClients: setupState.defaults?.enableSortClients === true,
-          enableExpireTime: setupState.defaults?.enableExpireTime === true,
-          avatarDicebearType: typeof setupState.defaults?.avatarDicebearType === 'string' ? setupState.defaults.avatarDicebearType : '',
-          avatarUseGravatar: setupState.defaults?.avatarUseGravatar === true,
-          trafficHistoryEnabled: setupState.defaults?.trafficHistoryEnabled === true,
-          trafficSampleIntervalSeconds: Number.parseInt(setupState.defaults?.trafficSampleIntervalSeconds, 10) || 1,
-          trafficRawRetentionHours: Number.parseInt(setupState.defaults?.trafficRawRetentionHours, 10) || 24,
-          trafficMinuteRetentionDays: Number.parseInt(setupState.defaults?.trafficMinuteRetentionDays, 10) || 90,
-          trafficHourRetentionDays: Number.parseInt(setupState.defaults?.trafficHourRetentionDays, 10) || 365,
-        };
+        this.setupRuntime = this.normalizeRuntimeSettings(setupState.defaults);
 
         if (this.setupState.needsSetup) {
           this.authenticated = false;
@@ -1787,41 +1905,10 @@ new Vue({
         const session = await this.api.getSession();
         this.authenticated = session.authenticated;
         this.requiresPassword = session.requiresPassword;
-        this.refresh({
-          updateCharts: this.updateCharts,
-        }).catch((err) => {
-          this.notifyError(err);
-        });
-        this.refreshClientIsolation().catch((err) => {
-          this.notifyError(err);
-        });
-        this.refreshUplinkConfigOptions().catch((err) => {
-          this.notifyError(err);
-        });
-        this.refreshUplinkSettings().catch((err) => {
-          this.notifyError(err);
-        });
-        this.refreshUplinkProtectedCidrs().catch((err) => {
-          this.notifyError(err);
-        });
-        this.refreshRoutingCategories().catch((err) => {
-          this.notifyError(err);
-        });
-        this.refreshDnsRouting().catch((err) => {
-          this.notifyError(err);
-        });
-        this.refreshSettings().catch((err) => {
-          this.notifyError(err);
-        });
-        this.refreshDnsLogs().catch((err) => {
-          this.notifyError(err);
-        });
-        this.loadAuthenticatedUiFlags().catch((err) => {
-          this.notifyError(err);
-        });
-        this.loadAuthenticatedRuntimeInfo().catch((err) => {
-          this.notifyError(err);
-        });
+        
+        await this.refreshCurrentPageData({ force: true });
+        await this.loadAuthenticatedUiFlags();
+        await this.loadAuthenticatedRuntimeInfo();
         this.connectRealtime();
       })
       .catch((err) => {
@@ -1874,6 +1961,17 @@ new Vue({
     }
   },
   computed: {
+    filteredClients() {
+      const search = (this.clientSearch || '').toLowerCase().trim();
+      const clients = Array.isArray(this.clients) ? this.clients : [];
+      if (!search) return clients;
+
+      return clients.filter((client) => {
+        return (client.name || '').toLowerCase().includes(search)
+          || (client.address || '').toLowerCase().includes(search)
+          || (client.publicKey || '').toLowerCase().includes(search);
+      });
+    },
     aclSelectorTypeOptions() {
       const options = [
         { value: 'all', label: this.$t('aclSelectorAll') },
@@ -2203,15 +2301,15 @@ new Vue({
       ];
     },
     uplinkSummaryCards() {
-      const uplinks = Array.isArray(this.uplinks) ? this.uplinks : [];
+      const uplinks = Array.isArray(this.uplinksDraft) ? this.uplinksDraft : [];
       const enabledCount = uplinks.filter((uplink) => uplink.enabled).length;
       const sourceRuleCount = uplinks
-        .flatMap((uplink) => uplink.sourceRulesText.split(/[\n,;]+/))
+        .flatMap((uplink) => (uplink.sourceRulesText || '').split(/[\n,;]+/))
         .map((value) => value.trim())
         .filter(Boolean)
         .length;
       const domainRuleCount = uplinks
-        .flatMap((uplink) => uplink.destinationDomainsText.split(/[\n,;]+/))
+        .flatMap((uplink) => (uplink.destinationDomainsText || '').split(/[\n,;]+/))
         .map((value) => value.trim())
         .filter(Boolean)
         .length;

@@ -19,6 +19,8 @@ services:
     extra_hosts:
       - "api.telegram.org:149.154.167.220"
     restart: unless-stopped
+    healthcheck:
+      disable: true
     cap_add:
       - NET_ADMIN
       - SYS_MODULE

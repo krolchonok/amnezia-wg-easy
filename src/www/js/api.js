@@ -407,3 +407,5 @@ class API {
   }
 
 }
+
+window.WgEasyApiClass = API;
