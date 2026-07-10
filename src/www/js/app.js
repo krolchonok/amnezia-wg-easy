@@ -1760,7 +1760,7 @@ new Vue({
       this.disconnectRealtime();
       if (!this.authenticated) return;
 
-      const source = new EventSource('/api/events');
+      const source = new EventSource('./api/events');
 
       source.onmessage = (event) => {
         let payload;
