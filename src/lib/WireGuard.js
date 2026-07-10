@@ -2607,7 +2607,7 @@ H4 = ${config.server.h4}
 [Peer]
 PublicKey = ${client.publicKey}
 ${client.preSharedKey ? `PresharedKey = ${client.preSharedKey}\n` : ''
-}AllowedIPs = ${client.address}/32`;
+}AllowedIPs = ${[`${client.address}/32`, ...(Array.isArray(client.extraAllowedIPs) ? client.extraAllowedIPs : [])].join(', ')}`;
     }
 
     debug('Config saving...');
